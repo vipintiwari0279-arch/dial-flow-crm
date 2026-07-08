@@ -92,13 +92,56 @@ exports.uploadLeads = async (req, res) => {
   }
 };
 
-// @desc    Distribute pending leads equally among online/paused agents (Round-Robin)
+// @desc    Distribute pending leads (Round-Robin or Manual to single agent)
 // @route   POST /api/leads/distribute
 // @access  Private (Admin Only)
 exports.distributeLeads = async (req, res) => {
+  const { mode, agentId, count } = req.body;
+
   try {
-    // 1. Get all online/paused/offline agents to participate or only online agents
-    // Normally we distribute to active (online or paused) agents.
+    if (mode === 'manual') {
+      if (!agentId) {
+        return res.status(400).json({ success: false, message: 'Please select an agent.' });
+      }
+
+      const agent = await User.findByPk(agentId);
+      if (!agent || agent.role !== 'agent') {
+        return res.status(404).json({ success: false, message: 'Agent not found.' });
+      }
+
+      const limitCount = count ? parseInt(count) : null;
+      const pendingLeads = await Lead.findAll({
+        where: { status: 'pending' },
+        order: [['createdAt', 'ASC']],
+        limit: limitCount
+      });
+
+      if (pendingLeads.length === 0) {
+        return res.status(400).json({
+          success: false,
+          message: 'No pending leads found to allocate.'
+        });
+      }
+
+      for (const lead of pendingLeads) {
+        lead.allocatedTo = agent.id;
+        lead.status = 'allocated';
+        await lead.save();
+      }
+
+      // Emit live monitoring update socket
+      const io = req.app.get('io');
+      if (io) {
+        io.emit('leads_distributed', { distributedCount: pendingLeads.length, agentId: agent.id });
+      }
+
+      return res.status(200).json({
+        success: true,
+        message: `Successfully allocated ${pendingLeads.length} leads to ${agent.name}.`
+      });
+    }
+
+    // Default Round-Robin mode:
     const agents = await User.findAll({
       where: {
         role: 'agent',
@@ -113,7 +156,6 @@ exports.distributeLeads = async (req, res) => {
       });
     }
 
-    // 2. Find all pending leads
     const pendingLeads = await Lead.findAll({
       where: { status: 'pending' },
       order: [['createdAt', 'ASC']]
@@ -127,7 +169,6 @@ exports.distributeLeads = async (req, res) => {
     }
 
     let distributedCount = 0;
-    // Round robin distribution
     for (let i = 0; i < pendingLeads.length; i++) {
       const lead = pendingLeads[i];
       const agent = agents[i % agents.length];
@@ -138,7 +179,6 @@ exports.distributeLeads = async (req, res) => {
       distributedCount++;
     }
 
-    // Emit live monitoring update socket
     const io = req.app.get('io');
     if (io) {
       io.emit('leads_distributed', { distributedCount });
