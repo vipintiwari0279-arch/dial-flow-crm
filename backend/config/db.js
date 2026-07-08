@@ -4,8 +4,20 @@ require('dotenv').config();
 
 let sequelize;
 
-if (process.env.DB_HOST && process.env.DB_USER) {
-  console.log('Connecting to PostgreSQL database...');
+if (process.env.DATABASE_URL) {
+  console.log('Connecting to PostgreSQL using DATABASE_URL...');
+  sequelize = new Sequelize(process.env.DATABASE_URL, {
+    dialect: 'postgres',
+    dialectOptions: {
+      ssl: {
+        require: true,
+        rejectUnauthorized: false
+      }
+    },
+    logging: false
+  });
+} else if (process.env.DB_HOST && process.env.DB_USER) {
+  console.log('Connecting to PostgreSQL database using host variables...');
   sequelize = new Sequelize(
     process.env.DB_NAME || 'dial_flow_crm',
     process.env.DB_USER,
