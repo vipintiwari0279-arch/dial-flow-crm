@@ -1,12 +1,22 @@
 {
   "expo": {
+    "name": "Dial Flow CRM",
+    "slug": "dialflow-agent-app",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "icon": "./assets/icon.png",
+    "userInterfaceStyle": "dark",
+    "android": {
+      "adaptiveIcon": {
+        "foregroundImage": "./assets/adaptive-icon.png",
+        "backgroundColor": "#0f172a"
+      },
+      "package": "com.vipin0279.dialflowagentapp"
+    },
     "extra": {
       "eas": {
         "projectId": "60d236b8-25b1-4658-96ee-780fa714ffe8"
       }
-    },
-    "android": {
-      "package": "com.vipin0279.dialflowagentapp"
     }
   }
 }
