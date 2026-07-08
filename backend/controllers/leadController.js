@@ -240,32 +240,14 @@ exports.getNextAgentLead = async (req, res) => {
   const agentId = req.user.id;
 
   try {
-    // Check if agent already has an active lead assigned in User model
-    let lead = null;
-    if (req.user.currentLeadId) {
-      lead = await Lead.findByPk(req.user.currentLeadId);
-    }
-
-    // If no active lead or the active lead is already called, find the next allocated lead
-    if (!lead || lead.status === 'called') {
-      lead = await Lead.findOne({
-        where: {
-          allocatedTo: agentId,
-          status: 'allocated'
-        },
-        order: [['createdAt', 'ASC']]
-      });
-
-      if (lead) {
-        // Save as current active lead for this agent
-        req.user.currentLeadId = lead.id;
-        await req.user.save();
-      } else {
-        // No allocated leads left
-        req.user.currentLeadId = null;
-        await req.user.save();
-      }
-    }
+    // Find the oldest allocated lead directly
+    const lead = await Lead.findOne({
+      where: {
+        allocatedTo: agentId,
+        status: 'allocated'
+      },
+      order: [['createdAt', 'ASC']]
+    });
 
     // Get stats for today for target tracking
     const todayStr = new Date().toISOString().split('T')[0];
