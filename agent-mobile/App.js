@@ -15,7 +15,7 @@ import {
 import { StatusBar } from 'expo-status-bar';
 import { io } from 'socket.io-client';
 
-const API_URL = 'http://localhost:5000'; // Change to server IP when running on physical device
+const API_URL = 'https://dial-flow-crm.onrender.com'; // Deployed live Render backend URL
 
 export default function App() {
   const [token, setToken] = useState('');
