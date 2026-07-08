@@ -4,7 +4,7 @@ const { Call, Lead, Dnc, User } = require('../models');
 // @route   POST /api/calls/log
 // @access  Private (Agent Only)
 exports.logCall = async (req, res) => {
-  const { leadId, duration, disposition, notes, callbackTime } = req.body;
+  const { leadId, duration, disposition, notes, callbackTime, leadName, phone } = req.body;
   const agentId = req.user.id;
 
   try {
@@ -12,14 +12,35 @@ exports.logCall = async (req, res) => {
       return res.status(400).json({ success: false, message: 'Lead ID and Disposition are required.' });
     }
 
-    const lead = await Lead.findByPk(leadId);
+    let lead;
+    if (String(leadId).startsWith('manual_')) {
+      const cleanPhone = String(phone || leadId.split('_')[1] || '').replace(/[^0-9]/g, '');
+      if (!cleanPhone) {
+        return res.status(400).json({ success: false, message: 'Phone number is required for reference call log.' });
+      }
+
+      lead = await Lead.findOne({ where: { phone: cleanPhone } });
+      if (!lead) {
+        lead = await Lead.create({
+          name: leadName || 'Reference Lead',
+          phone: cleanPhone,
+          city: 'Manual Dial',
+          state: 'Reference',
+          status: 'called',
+          allocatedTo: agentId
+        });
+      }
+    } else {
+      lead = await Lead.findByPk(leadId);
+    }
+
     if (!lead) {
       return res.status(404).json({ success: false, message: 'Lead not found.' });
     }
 
     // 1. Create Call Log
     const newCall = await Call.create({
-      leadId,
+      leadId: lead.id,
       agentId,
       duration: duration || 0,
       disposition,

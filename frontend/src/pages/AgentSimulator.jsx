@@ -454,7 +454,9 @@ const AgentSimulator = () => {
           duration: callTimer,
           disposition,
           notes,
-          callbackTime: disposition === 'callback' ? callbackTime : null
+          callbackTime: disposition === 'callback' ? callbackTime : null,
+          leadName: currentLead.name,
+          phone: currentLead.phone
         })
       });
 

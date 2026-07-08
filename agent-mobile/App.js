@@ -382,7 +382,9 @@ export default function App() {
           duration: callTimer,
           disposition,
           notes,
-          callbackTime: disposition === 'callback' ? callbackTime : null
+          callbackTime: disposition === 'callback' ? callbackTime : null,
+          leadName: currentLead.name,
+          phone: currentLead.phone
         })
       });
       const data = await response.json();
