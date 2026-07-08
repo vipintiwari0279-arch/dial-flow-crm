@@ -111,3 +111,38 @@ exports.updateStatus = async (req, res) => {
     res.status(500).json({ success: false, message: 'Server error' });
   }
 };
+
+// @desc    Debug endpoint to see all users in the DB
+// @route   GET /api/auth/debug
+// @access  Public
+exports.debugDb = async (req, res) => {
+  try {
+    const { User, Lead } = require('../models');
+    const users = await User.findAll({
+      attributes: ['id', 'name', 'email', 'role', 'status']
+    });
+
+    const usersWithLeadCounts = await Promise.all(
+      users.map(async (u) => {
+        const count = await Lead.count({
+          where: { allocatedTo: u.id, status: 'allocated' }
+        });
+        return {
+          id: u.id,
+          name: u.name,
+          email: u.email,
+          role: u.role,
+          status: u.status,
+          allocatedLeads: count
+        };
+      })
+    );
+
+    res.status(200).json({
+      success: true,
+      users: usersWithLeadCounts
+    });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+};
