@@ -939,6 +939,7 @@ const AgentSimulator = () => {
                         <ChevronRight className="w-4 h-4" />
                       </button>
                     </div>
+                  )}
                   {/* Callbacks Drawer Slide-up Overlay */}
                   {showCallbacksDrawer && (
                     <div className="absolute inset-0 bg-slate-950/60 flex flex-col justify-end z-50 animate-fade-in pt-6">
