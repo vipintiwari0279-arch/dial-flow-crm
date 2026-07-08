@@ -54,6 +54,8 @@ export default function App() {
   const [autoDialEnabled, setAutoDialEnabled] = useState(false);
   const [showCallbacksDrawer, setShowCallbacksDrawer] = useState(false);
   const [callbacksList, setCallbacksList] = useState([]);
+  const [outcomesList, setOutcomesList] = useState([]);
+  const [manualPhone, setManualPhone] = useState('');
 
   // Call & disposition timer state
   const [callTimer, setCallTimer] = useState(0);
@@ -100,6 +102,7 @@ export default function App() {
         connectSocket(data.user.id, data.user.name);
         fetchNextLead(data.token);
         fetchAttendanceStatus(data.token);
+        fetchOutcomesList(data.token);
         setScreen('dialer');
       } else {
         Alert.alert('Error', data.message || 'Invalid credentials');
@@ -108,6 +111,23 @@ export default function App() {
       Alert.alert('Connection Error', 'Ensure the server backend is running and URL is set correctly.');
     } finally {
       setLoading(false);
+    }
+  };
+
+  const fetchOutcomesList = async (authToken) => {
+    try {
+      const response = await fetch(`${API_URL}/api/dispositions`, {
+        headers: { Authorization: `Bearer ${authToken || token}` }
+      });
+      const data = await response.json();
+      if (data.success) {
+        setOutcomesList(data.outcomes);
+        if (data.outcomes.length > 0) {
+          setDisposition(data.outcomes[0].label);
+        }
+      }
+    } catch (e) {
+      console.log('Error fetching outcomes list:', e);
     }
   };
 
@@ -309,6 +329,22 @@ export default function App() {
         setCallTimer(prev => prev + 1);
       }, 1000);
     }, 2000);
+  };
+
+  const handleManualDial = () => {
+    if (!manualPhone.trim()) return;
+
+    const tempLead = {
+      id: 'manual_' + Date.now(),
+      name: 'Reference Lead',
+      phone: manualPhone,
+      city: 'Manual Dial',
+      state: 'Reference'
+    };
+
+    setCurrentLead(tempLead);
+    setManualPhone('');
+    startDialing(tempLead);
   };
 
   const endCall = () => {
@@ -561,6 +597,44 @@ export default function App() {
                 <Text style={styles.targetProgress}>{completedToday} / {targetCalls} Calls</Text>
               </View>
 
+              {/* Manual Reference Dialer Input */}
+              <View style={styles.targetCard}>
+                <Text style={styles.targetTitle}>Manual Reference Dial</Text>
+                <View style={{ flexDirection: 'row', alignItems: 'center', marginTop: 10 }}>
+                  <TextInput
+                    style={{
+                      flex: 1,
+                      backgroundColor: '#1e293b',
+                      color: '#fff',
+                      paddingHorizontal: 12,
+                      paddingVertical: 8,
+                      borderRadius: 8,
+                      fontSize: 14,
+                      fontFamily: Platform.OS === 'ios' ? 'Courier' : 'monospace',
+                      marginRight: 8,
+                      borderWidth: 1,
+                      borderColor: '#334155'
+                    }}
+                    placeholder="Enter phone number..."
+                    placeholderTextColor="#64748b"
+                    keyboardType="numeric"
+                    value={manualPhone}
+                    onChangeText={(val) => setManualPhone(val.replace(/[^0-9]/g, ''))}
+                  />
+                  <TouchableOpacity
+                    style={[
+                      styles.punchBtn, 
+                      { marginTop: 0, paddingHorizontal: 16, backgroundColor: '#2563eb' },
+                      (!manualPhone || !punchedIn) && { opacity: 0.5 }
+                    ]}
+                    onPress={handleManualDial}
+                    disabled={!manualPhone || !punchedIn}
+                  >
+                    <Text style={styles.punchBtnText}>Dial</Text>
+                  </TouchableOpacity>
+                </View>
+              </View>
+
               {/* Current allocated lead details */}
               <Text style={styles.sectionHeader}>Current Lead</Text>
               {currentLead ? (
@@ -580,13 +654,13 @@ export default function App() {
               <TouchableOpacity
                 style={[
                   styles.callBtn, 
-                  (!currentLead || user?.status !== 'online' || !punchedIn || punchedOut) && styles.callBtnDisabled
+                  (!currentLead || user?.status !== 'online' || !punchedIn) && styles.callBtnDisabled
                 ]}
-                onPress={startDialing}
-                disabled={!currentLead || user?.status !== 'online' || !punchedIn || punchedOut}
+                onPress={() => startDialing()}
+                disabled={!currentLead || user?.status !== 'online' || !punchedIn}
               >
                 <Text style={styles.callBtnText}>
-                  {!punchedIn ? 'Punch In First to Call' : punchedOut ? 'Shift Ended' : 'Call Now'}
+                  {!punchedIn ? 'Punch In First to Call' : 'Call Now'}
                 </Text>
               </TouchableOpacity>
             </ScrollView>
@@ -612,7 +686,7 @@ export default function App() {
             <ScrollView contentContainerStyle={styles.content}>
               <Text style={styles.sectionHeader}>Log Call Outcome</Text>
               <View style={styles.dispositionContainer}>
-                {['interested', 'callback', 'not_interested', 'dnc'].map((status) => (
+                {(outcomesList.length > 0 ? outcomesList.map(o => o.label) : ['interested', 'callback', 'not_interested', 'dnc']).map((status) => (
                   <TouchableOpacity
                     key={status}
                     style={[

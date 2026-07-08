@@ -59,6 +59,8 @@ const AgentSimulator = () => {
   const [autoDialEnabled, setAutoDialEnabled] = useState(false);
   const [showCallbacksDrawer, setShowCallbacksDrawer] = useState(false);
   const [callbacksList, setCallbacksList] = useState([]);
+  const [outcomesList, setOutcomesList] = useState([]);
+  const [manualPhone, setManualPhone] = useState('');
 
   // Refs for timers
   const timerIntervalRef = useRef(null);
@@ -126,11 +128,29 @@ const AgentSimulator = () => {
         connectSimulatorSocket(data.user.id, data.user.name);
         fetchAgentNextLead(data.token);
         fetchAttendanceStatus(data.token);
+        fetchOutcomesList(data.token);
       } else {
         setErrorMsg(data.message || 'Login failed. Check server status.');
       }
     } catch (err) {
       setErrorMsg('Failed to connect to authentication API.');
+    }
+  };
+
+  const fetchOutcomesList = async (authToken) => {
+    try {
+      const response = await fetch('/api/dispositions', {
+        headers: { 'Authorization': `Bearer ${authToken || token}` }
+      });
+      const data = await response.json();
+      if (data.success) {
+        setOutcomesList(data.outcomes);
+        if (data.outcomes.length > 0) {
+          setDisposition(data.outcomes[0].label);
+        }
+      }
+    } catch (e) {
+      console.error('Error fetching dispositions:', e);
     }
   };
 
@@ -343,6 +363,23 @@ const AgentSimulator = () => {
         setCallTimer(prev => prev + 1);
       }, 1000);
     }, 2500);
+  };
+
+  const handleManualDial = (e) => {
+    if (e) e.preventDefault();
+    if (!manualPhone.trim()) return;
+
+    const tempLead = {
+      id: 'manual_' + Date.now(),
+      name: 'Reference Lead',
+      phone: manualPhone,
+      city: 'Manual Dial',
+      state: 'Reference'
+    };
+
+    setCurrentLead(tempLead);
+    setManualPhone('');
+    handleDial(tempLead);
   };
 
   const sendWhatsApp = (lead, disp) => {
@@ -725,6 +762,29 @@ const AgentSimulator = () => {
                           </button>
                         </div>
 
+                        {/* Manual Reference Dialer Input */}
+                        <form onSubmit={handleManualDial} className="bg-white rounded-3xl border border-slate-200/80 p-4 shadow-sm space-y-3">
+                          <div className="text-left">
+                            <p className="text-[10px] font-bold text-slate-700 uppercase tracking-wider">Manual Reference Dial</p>
+                          </div>
+                          <div className="flex items-center gap-2">
+                            <input
+                              type="tel"
+                              placeholder="Enter number..."
+                              value={manualPhone}
+                              onChange={(e) => setManualPhone(e.target.value.replace(/[^0-9]/g, ''))}
+                              className="flex-1 px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-mono font-bold focus:outline-none focus:ring-2 focus:ring-brand-500"
+                            />
+                            <button
+                              type="submit"
+                              disabled={!manualPhone || !punchedIn}
+                              className="px-4 py-2 bg-brand-600 hover:bg-brand-700 disabled:opacity-40 text-white rounded-xl text-xs font-extrabold transition-all"
+                            >
+                              Dial
+                            </button>
+                          </div>
+                        </form>
+
                         {/* Allocated Lead Card */}
                         <div>
                           <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-2">Current Allocated Lead</p>
@@ -759,12 +819,17 @@ const AgentSimulator = () => {
 
                       {/* Dialer triggers */}
                       <button
-                        onClick={handleDial}
-                        disabled={!currentLead || agentUser.status !== 'online' || !punchedIn || punchedOut}
+                        onClick={handleManualDial}
+                        disabled={!manualPhone || !punchedIn}
+                        style={{ display: 'none' }} // hidden proxy button for form triggers
+                      />
+                      <button
+                        onClick={() => handleDial()}
+                        disabled={!currentLead || agentUser.status !== 'online' || !punchedIn}
                         className="w-full py-4 rounded-2xl bg-emerald-500 hover:bg-emerald-600 disabled:opacity-40 disabled:cursor-not-allowed text-white font-extrabold text-sm flex items-center justify-center gap-2 shadow-lg shadow-emerald-500/20 transition-all hover-scale mt-4"
                       >
                         <Phone className="w-4 h-4 fill-white" />
-                        <span>{!punchedIn ? 'Punch In First to Call' : punchedOut ? 'Shift Ended' : 'Call Now'}</span>
+                        <span>{!punchedIn ? 'Punch In First to Call' : 'Call Now'}</span>
                       </button>
                     </div>
                   )}
@@ -855,12 +920,22 @@ const AgentSimulator = () => {
                             onChange={(e) => setDisposition(e.target.value)}
                             className="block w-full px-3 py-2 bg-white border border-slate-200 rounded-xl text-xs font-semibold focus:outline-none focus:ring-2 focus:ring-brand-500"
                           >
-                            <option value="interested">Interested</option>
-                            <option value="not_interested">Not Interested</option>
-                            <option value="callback">Callback Reminder</option>
-                            <option value="dnc">DNC List</option>
-                            <option value="wrong_number">Wrong Number</option>
-                            <option value="others">Others</option>
+                            {outcomesList.length > 0 ? (
+                              outcomesList.map((item) => (
+                                <option key={item.id} value={item.label}>
+                                  {item.label.replace(/_/g, ' ').toUpperCase()}
+                                </option>
+                              ))
+                            ) : (
+                              <>
+                                <option value="interested">Interested</option>
+                                <option value="not_interested">Not Interested</option>
+                                <option value="callback">Callback Reminder</option>
+                                <option value="dnc">DNC List</option>
+                                <option value="wrong_number">Wrong Number</option>
+                                <option value="others">Others</option>
+                              </>
+                            )}
                           </select>
                         </div>
 

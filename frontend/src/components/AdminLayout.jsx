@@ -33,6 +33,7 @@ const AdminLayout = ({ children }) => {
     { name: 'Live Monitoring', path: '/admin/live', icon: Activity },
     { name: 'Callback Leads', path: '/admin/callbacks', icon: Calendar },
     { name: 'DNC List', path: '/admin/dnc', icon: ShieldAlert },
+    { name: 'Dispositions', path: '/admin/dispositions', icon: Settings },
     { name: 'Agent Simulator', path: '/simulator', icon: Smartphone, highlight: true }
   ];
 

@@ -5,6 +5,7 @@ const Call = require('./Call');
 const Dnc = require('./Dnc');
 const Target = require('./Target');
 const Attendance = require('./Attendance');
+const Outcome = require('./Outcome');
 
 // Relationships
 
@@ -39,5 +40,6 @@ module.exports = {
   Call,
   Dnc,
   Target,
-  Attendance
+  Attendance,
+  Outcome
 };

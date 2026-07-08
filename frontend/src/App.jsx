@@ -17,6 +17,7 @@ import Callbacks from './pages/Callbacks';
 import DncList from './pages/DncList';
 import AgentSimulator from './pages/AgentSimulator';
 import AttendanceLogs from './pages/AttendanceLogs';
+import ManageDispositions from './pages/ManageDispositions';
 
 const ProtectedRoute = ({ children, allowedRoles }) => {
   const { user, loading } = useAuth();
@@ -119,6 +120,13 @@ const AppContent = () => {
           <ProtectedRoute allowedRoles={['admin']}>
             <AdminLayout>
               <DncList />
+            </AdminLayout>
+          </ProtectedRoute>
+        } />
+        <Route path="/admin/dispositions" element={
+          <ProtectedRoute allowedRoles={['admin']}>
+            <AdminLayout>
+              <ManageDispositions />
             </AdminLayout>
           </ProtectedRoute>
         } />
