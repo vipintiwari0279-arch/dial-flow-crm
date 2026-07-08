@@ -10,7 +10,8 @@ import {
   ActivityIndicator,
   Alert,
   Dimensions,
-  Platform
+  Platform,
+  Linking
 } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
 import { io } from 'socket.io-client';
@@ -134,6 +135,11 @@ export default function App() {
     if (!currentLead) return;
     setScreen('active_call');
     setCallTimer(0);
+
+    // Open physical SIM card dialer automatically to make a real phone call!
+    Linking.openURL(`tel:${currentLead.phone}`).catch(err => {
+      console.log('Error opening native dialer:', err);
+    });
 
     // Notify backend
     if (socketRef.current) {
