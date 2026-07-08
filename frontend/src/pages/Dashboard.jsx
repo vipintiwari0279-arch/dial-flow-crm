@@ -11,7 +11,8 @@ import {
   Layers,
   ArrowUpRight,
   TrendingUp,
-  Activity
+  Activity,
+  Trophy
 } from 'lucide-react';
 import {
   AreaChart,
@@ -278,6 +279,49 @@ const Dashboard = () => {
               )}
             </tbody>
           </table>
+        </div>
+      </div>
+
+      {/* Agent Performance Leaderboard */}
+      <div className="bg-white rounded-3xl border border-slate-200/80 shadow-premium p-6">
+        <div className="flex items-center gap-2 mb-6">
+          <Trophy className="w-5 h-5 text-amber-500" />
+          <h3 className="font-extrabold text-slate-800 tracking-tight">Agent Performance Leaderboard</h3>
+        </div>
+
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+          {[...agents]
+            .sort((a, b) => b.connected - a.connected)
+            .slice(0, 3)
+            .map((agent, index) => {
+              const colors = [
+                { border: 'border-amber-200', bg: 'bg-amber-50/50', text: 'text-amber-700', badge: '🥇 Gold' },
+                { border: 'border-slate-200', bg: 'bg-slate-50/50', text: 'text-slate-700', badge: '🥈 Silver' },
+                { border: 'border-orange-200', bg: 'bg-orange-50/50', text: 'text-orange-700', badge: '🥉 Bronze' }
+              ];
+              const rankStyle = colors[index] || { border: 'border-slate-100', bg: 'bg-slate-50', text: 'text-slate-500', badge: `#${index + 1}` };
+
+              return (
+                <div key={agent.id} className={`p-5 rounded-2xl border ${rankStyle.border} ${rankStyle.bg} flex items-center justify-between shadow-sm`}>
+                  <div className="flex items-center gap-3">
+                    <div className="w-10 h-10 rounded-full bg-white flex items-center justify-center font-bold text-slate-700 border border-slate-100 shadow-inner">
+                      {agent.name.split(' ').map(n => n[0]).join('')}
+                    </div>
+                    <div>
+                      <h4 className="font-extrabold text-sm text-slate-800">{agent.name}</h4>
+                      <p className="text-[10px] font-bold tracking-wider text-slate-400 uppercase">{rankStyle.badge}</p>
+                    </div>
+                  </div>
+                  <div className="text-right">
+                    <span className={`text-xl font-black ${rankStyle.text}`}>{agent.connected}</span>
+                    <p className="text-[9px] font-bold text-slate-400 uppercase tracking-widest mt-0.5">Connects</p>
+                  </div>
+                </div>
+              );
+            })}
+          {agents.length === 0 && (
+            <div className="col-span-3 py-4 text-center text-slate-400 font-medium">No performance rankings available yet.</div>
+          )}
         </div>
       </div>
 

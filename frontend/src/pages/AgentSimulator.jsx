@@ -56,6 +56,9 @@ const AgentSimulator = () => {
   const [notes, setNotes] = useState('');
   const [callbackTime, setCallbackTime] = useState('');
   const [errorMsg, setErrorMsg] = useState('');
+  const [autoDialEnabled, setAutoDialEnabled] = useState(false);
+  const [showCallbacksDrawer, setShowCallbacksDrawer] = useState(false);
+  const [callbacksList, setCallbacksList] = useState([]);
 
   // Refs for timers
   const timerIntervalRef = useRef(null);
@@ -235,10 +238,12 @@ const AgentSimulator = () => {
         if (data.stats) {
           setStats(data.stats);
         }
+        return data.lead;
       }
     } catch (e) {
       console.error('Error fetching lead:', e);
     }
+    return null;
   };
 
   const handleSimulatedLogout = async () => {
@@ -301,8 +306,9 @@ const AgentSimulator = () => {
   };
 
   // Dial Call action
-  const handleDial = () => {
-    if (!currentLead) return;
+  const handleDial = (leadToDial) => {
+    const activeLead = leadToDial || currentLead;
+    if (!activeLead) return;
     setScreen('dialing');
     setCallTimer(0);
 
@@ -311,8 +317,8 @@ const AgentSimulator = () => {
       socketRef.current.emit('call_state_change', {
         agentId: agentUser.id,
         agentName: agentUser.name,
-        leadName: currentLead.name,
-        phone: currentLead.phone,
+        leadName: activeLead.name,
+        phone: activeLead.phone,
         state: 'dialing'
       });
     }
@@ -326,8 +332,8 @@ const AgentSimulator = () => {
         socketRef.current.emit('call_state_change', {
           agentId: agentUser.id,
           agentName: agentUser.name,
-          leadName: currentLead.name,
-          phone: currentLead.phone,
+          leadName: activeLead.name,
+          phone: activeLead.phone,
           state: 'talking'
         });
       }
@@ -337,6 +343,37 @@ const AgentSimulator = () => {
         setCallTimer(prev => prev + 1);
       }, 1000);
     }, 2500);
+  };
+
+  const sendWhatsApp = (lead, disp) => {
+    if (!lead) return;
+    let message = '';
+    if (disp === 'interested') {
+      message = `Hello ${lead.name}, thank you for speaking with me today. Here is our product catalog link: https://example.com/catalog. Let us know if you have any questions!`;
+    } else if (disp === 'callback') {
+      message = `Hello ${lead.name}, as requested, I have scheduled your callback reminder. Talk to you soon!`;
+    } else {
+      message = `Hello ${lead.name}, thank you for your time today. Best regards.`;
+    }
+
+    const cleanPhone = lead.phone.replace(/[^0-9]/g, '');
+    const url = `https://api.whatsapp.com/send?phone=${cleanPhone.startsWith('91') ? cleanPhone : '91' + cleanPhone}&text=${encodeURIComponent(message)}`;
+    window.open(url, '_blank');
+  };
+
+  const fetchAndShowCallbacks = async () => {
+    try {
+      const response = await fetch('/api/leads/callbacks', {
+        headers: { 'Authorization': `Bearer ${token}` }
+      });
+      const data = await response.json();
+      if (data.success) {
+        setCallbacksList(data.callbacks);
+        setShowCallbacksDrawer(true);
+      }
+    } catch (e) {
+      console.error('Failed to fetch callbacks:', e);
+    }
   };
 
   // Hangup Action
@@ -351,6 +388,15 @@ const AgentSimulator = () => {
         agentName: agentUser.name,
         state: 'idle'
       });
+    }
+  };
+
+  const handleCountdownExpiry = async () => {
+    const nextLead = await fetchAgentNextLead(token);
+    if (nextLead && autoDialEnabled) {
+      handleDial(nextLead);
+    } else {
+      setScreen('home');
     }
   };
 
@@ -388,9 +434,7 @@ const AgentSimulator = () => {
           setCountdown(prev => {
             if (prev <= 1) {
               clearInterval(countdownIntervalRef.current);
-              // Trigger pull next lead
-              fetchAgentNextLead(token);
-              setScreen('home');
+              handleCountdownExpiry();
               return 0;
             }
             return prev - 1;
@@ -404,8 +448,7 @@ const AgentSimulator = () => {
 
   const handleSkipCountdown = () => {
     clearInterval(countdownIntervalRef.current);
-    fetchAgentNextLead(token);
-    setScreen('home');
+    handleCountdownExpiry();
   };
 
   // Helper format seconds -> mm:ss
@@ -560,6 +603,12 @@ const AgentSimulator = () => {
                     </div>
                   </div>
                   <div className="flex items-center gap-2">
+                    <button
+                      onClick={fetchAndShowCallbacks}
+                      className="px-2 py-0.5 text-[8px] font-bold bg-amber-500/20 text-amber-400 rounded-lg hover:bg-amber-500/35 transition-all"
+                    >
+                      CALLBACKS
+                    </button>
                     <span className={`w-2 h-2 rounded-full ${
                       agentUser?.status === 'online' ? 'bg-emerald-500 animate-pulse' : agentUser?.status === 'paused' ? 'bg-amber-500' : 'bg-slate-500'
                     }`}></span>
@@ -656,6 +705,24 @@ const AgentSimulator = () => {
                             <span className="text-[9px] font-bold text-slate-400 uppercase tracking-wider">Callbacks</span>
                             <span className="text-xl font-black text-amber-500 mt-auto leading-none">{stats.callbacks}</span>
                           </div>
+                        </div>
+
+                        {/* Predictive Auto-Dialer Toggle Switch */}
+                        <div className="bg-white rounded-3xl border border-slate-200/80 p-4 shadow-sm flex items-center justify-between">
+                          <div>
+                            <p className="text-[10px] font-bold text-slate-700">Predictive Auto-Dialer</p>
+                            <p className="text-[9px] font-semibold text-slate-400">
+                              {autoDialEnabled ? 'Automatic calling ACTIVE' : 'Manual calling active'}
+                            </p>
+                          </div>
+                          <button
+                            onClick={() => setAutoDialEnabled(!autoDialEnabled)}
+                            className={`px-3 py-1 rounded-xl text-[10px] font-extrabold text-white transition-all ${
+                              autoDialEnabled ? 'bg-purple-600' : 'bg-slate-400'
+                            }`}
+                          >
+                            {autoDialEnabled ? 'ACTIVE' : 'INACTIVE'}
+                          </button>
                         </div>
 
                         {/* Allocated Lead Card */}
@@ -826,13 +893,23 @@ const AgentSimulator = () => {
                         </div>
                       </div>
 
-                      <button
-                        type="submit"
-                        className="w-full py-4 rounded-2xl bg-brand-600 hover:bg-brand-700 text-white font-extrabold text-sm flex items-center justify-center gap-2 shadow-lg shadow-brand-500/20 transition-all hover-scale mt-4"
-                      >
-                        <Save className="w-4 h-4" />
-                        <span>Save & Next Lead</span>
-                      </button>
+                      <div className="space-y-2 mt-4">
+                        <button
+                          type="submit"
+                          className="w-full py-4 rounded-2xl bg-brand-600 hover:bg-brand-700 text-white font-extrabold text-sm flex items-center justify-center gap-2 shadow-lg shadow-brand-500/20 transition-all hover-scale"
+                        >
+                          <Save className="w-4 h-4" />
+                          <span>Save & Next Lead</span>
+                        </button>
+
+                        <button
+                          type="button"
+                          onClick={() => sendWhatsApp(currentLead, disposition)}
+                          className="w-full py-4 rounded-2xl bg-emerald-500 hover:bg-emerald-600 text-white font-extrabold text-sm flex items-center justify-center gap-2 shadow-lg shadow-emerald-500/20 transition-all hover-scale"
+                        >
+                          <span>Send WhatsApp Follow-up</span>
+                        </button>
+                      </div>
                     </form>
                   )}
 
@@ -861,6 +938,53 @@ const AgentSimulator = () => {
                         <span>Skip Countdown</span>
                         <ChevronRight className="w-4 h-4" />
                       </button>
+                    </div>
+                  {/* Callbacks Drawer Slide-up Overlay */}
+                  {showCallbacksDrawer && (
+                    <div className="absolute inset-0 bg-slate-950/60 flex flex-col justify-end z-50 animate-fade-in pt-6">
+                      <div className="bg-slate-50 rounded-t-[24px] h-[80%] flex flex-col overflow-hidden border-t border-slate-200">
+                        <div className="px-4 py-3 bg-white border-b border-slate-100 flex items-center justify-between shrink-0">
+                          <h4 className="font-extrabold text-xs text-slate-800">Callbacks Reminder</h4>
+                          <button 
+                            type="button"
+                            onClick={() => setShowCallbacksDrawer(false)}
+                            className="text-[10px] font-bold text-rose-500 hover:text-rose-600 bg-rose-50 px-2.5 py-1.5 rounded-lg"
+                          >
+                            Close
+                          </button>
+                        </div>
+                        <div className="flex-1 overflow-y-auto p-3 space-y-2 text-left">
+                          {callbacksList.length === 0 ? (
+                            <p className="text-center text-[10px] font-medium text-slate-400 py-12">No callbacks scheduled.</p>
+                          ) : (
+                            callbacksList.map((cb) => (
+                              <div key={cb.id} className="bg-white border border-slate-100 rounded-xl p-3 flex items-center justify-between shadow-sm">
+                                <div>
+                                  <p className="font-extrabold text-[11px] text-slate-800">{cb.name}</p>
+                                  <p className="text-[9px] font-mono font-bold text-slate-500 mt-0.5">{cb.phone}</p>
+                                  {cb.callbackTime && (
+                                    <p className="text-[8px] font-bold text-amber-500 mt-1 flex items-center gap-0.5">
+                                      <Clock className="w-2.5 h-2.5" />
+                                      <span>{new Date(cb.callbackTime).toLocaleString()}</span>
+                                    </p>
+                                  )}
+                                </div>
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    setShowCallbacksDrawer(false);
+                                    setCurrentLead(cb);
+                                    handleDial(cb);
+                                  }}
+                                  className="px-3 py-1.5 bg-emerald-500 hover:bg-emerald-600 text-white rounded-lg text-[10px] font-extrabold transition-all"
+                                >
+                                  Call
+                                </button>
+                              </div>
+                            ))
+                          )}
+                        </div>
+                      </div>
                     </div>
                   )}
                 </div>

@@ -11,7 +11,8 @@ import {
   Alert,
   Dimensions,
   Platform,
-  Linking
+  Linking,
+  Modal
 } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
 import { io } from 'socket.io-client';
@@ -48,6 +49,11 @@ export default function App() {
   const [punchedIn, setPunchedIn] = useState(false);
   const [punchedOut, setPunchedOut] = useState(false);
   const [punchLoading, setPunchLoading] = useState(false);
+
+  // Advanced States
+  const [autoDialEnabled, setAutoDialEnabled] = useState(false);
+  const [showCallbacksDrawer, setShowCallbacksDrawer] = useState(false);
+  const [callbacksList, setCallbacksList] = useState([]);
 
   // Call & disposition timer state
   const [callTimer, setCallTimer] = useState(0);
@@ -192,9 +198,49 @@ export default function App() {
         if (data.stats) {
           setStats(data.stats);
         }
+        return data.lead;
       }
     } catch (e) {
       console.log('Error fetching lead:', e);
+    }
+    return null;
+  };
+
+  const sendWhatsApp = (lead, disp) => {
+    if (!lead) return;
+    let message = '';
+    if (disp === 'interested') {
+      message = `Hello ${lead.name}, thank you for speaking with me today. Here is our product catalog link: https://example.com/catalog. Let us know if you have any questions!`;
+    } else if (disp === 'callback') {
+      message = `Hello ${lead.name}, as requested, I have scheduled your callback reminder. Talk to you soon!`;
+    } else {
+      message = `Hello ${lead.name}, thank you for your time today. Best regards.`;
+    }
+
+    const cleanPhone = lead.phone.replace(/[^0-9]/g, '');
+    const url = `whatsapp://send?phone=${cleanPhone.startsWith('91') ? cleanPhone : '91' + cleanPhone}&text=${encodeURIComponent(message)}`;
+    Linking.openURL(url).catch(() => {
+      const webUrl = `https://api.whatsapp.com/send?phone=${cleanPhone.startsWith('91') ? cleanPhone : '91' + cleanPhone}&text=${encodeURIComponent(message)}`;
+      Linking.openURL(webUrl).catch(() => {
+        Alert.alert('Error', 'Could not open WhatsApp.');
+      });
+    });
+  };
+
+  const fetchAndShowCallbacks = async () => {
+    try {
+      const response = await fetch(`${API_URL}/api/leads/callbacks`, {
+        headers: { Authorization: `Bearer ${token}` }
+      });
+      const data = await response.json();
+      if (data.success) {
+        setCallbacksList(data.callbacks);
+        setShowCallbacksDrawer(true);
+      } else {
+        Alert.alert('Error', 'Failed to fetch callbacks.');
+      }
+    } catch (e) {
+      Alert.alert('Error', 'Failed to fetch callbacks.');
     }
   };
 
@@ -225,13 +271,14 @@ export default function App() {
     }
   };
 
-  const startDialing = () => {
-    if (!currentLead) return;
+  const startDialing = (leadToDial) => {
+    const activeLead = leadToDial || currentLead;
+    if (!activeLead) return;
     setScreen('active_call');
     setCallTimer(0);
 
     // Open physical SIM card dialer automatically to make a real phone call!
-    Linking.openURL(`tel:${currentLead.phone}`).catch(err => {
+    Linking.openURL(`tel:${activeLead.phone}`).catch(err => {
       console.log('Error opening native dialer:', err);
     });
 
@@ -240,8 +287,8 @@ export default function App() {
       socketRef.current.emit('call_state_change', {
         agentId: user.id,
         agentName: user.name,
-        leadName: currentLead.name,
-        phone: currentLead.phone,
+        leadName: activeLead.name,
+        phone: activeLead.phone,
         state: 'dialing'
       });
     }
@@ -252,8 +299,8 @@ export default function App() {
         socketRef.current.emit('call_state_change', {
           agentId: user.id,
           agentName: user.name,
-          leadName: currentLead.name,
-          phone: currentLead.phone,
+          leadName: activeLead.name,
+          phone: activeLead.phone,
           state: 'talking'
         });
       }
@@ -274,6 +321,15 @@ export default function App() {
         agentName: user.name,
         state: 'idle'
       });
+    }
+  };
+
+  const handleCountdownExpiry = async () => {
+    const nextLead = await fetchNextLead(token);
+    if (nextLead && autoDialEnabled) {
+      startDialing(nextLead);
+    } else {
+      setScreen('dialer');
     }
   };
 
@@ -307,8 +363,7 @@ export default function App() {
           setCountdown(prev => {
             if (prev <= 1) {
               clearInterval(countdownIntervalRef.current);
-              fetchNextLead(token);
-              setScreen('dialer');
+              handleCountdownExpiry();
               return 0;
             }
             return prev - 1;
@@ -322,8 +377,7 @@ export default function App() {
 
   const skipCountdown = () => {
     clearInterval(countdownIntervalRef.current);
-    fetchNextLead(token);
-    setScreen('dialer');
+    handleCountdownExpiry();
   };
 
   const handleLogout = () => {
@@ -397,13 +451,21 @@ export default function App() {
               <Text style={styles.welcomeText}>Good Morning,</Text>
               <Text style={styles.agentName}>{user?.name}</Text>
             </View>
-            <TouchableOpacity
-              style={styles.statusBadge}
-              onPress={() => setShowStatusMenu(!showStatusMenu)}
-            >
-              <View style={[styles.statusDot, user?.status === 'online' && styles.statusDotOnline]} />
-              <Text style={styles.statusText}>{user?.status?.toUpperCase()}</Text>
-            </TouchableOpacity>
+            <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+              <TouchableOpacity
+                style={[styles.statusBadge, { marginRight: 8, backgroundColor: '#f59e0b' }]}
+                onPress={fetchAndShowCallbacks}
+              >
+                <Text style={styles.statusText}>CALLBACKS</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={styles.statusBadge}
+                onPress={() => setShowStatusMenu(!showStatusMenu)}
+              >
+                <View style={[styles.statusDot, user?.status === 'online' && styles.statusDotOnline]} />
+                <Text style={styles.statusText}>{user?.status?.toUpperCase()}</Text>
+              </TouchableOpacity>
+            </View>
           </View>
 
           {/* Status Switcher Popover */}
@@ -473,6 +535,26 @@ export default function App() {
                 </View>
               </View>
 
+              {/* Predictive Auto-Dialer Toggle Switch */}
+              <View style={[styles.targetCard, { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }]}>
+                <View style={{ flex: 1, paddingRight: 8 }}>
+                  <Text style={styles.targetTitle}>Predictive Auto-Dialer</Text>
+                  <Text style={styles.attendanceStatusText}>
+                    {autoDialEnabled ? 'Automatic calling mode is ACTIVE' : 'Manual calling mode is active'}
+                  </Text>
+                </View>
+                <TouchableOpacity
+                  style={[
+                    styles.punchBtn, 
+                    { marginTop: 0, paddingHorizontal: 16 }, 
+                    autoDialEnabled ? { backgroundColor: '#7c3aed' } : { backgroundColor: '#94a3b8' }
+                  ]}
+                  onPress={() => setAutoDialEnabled(!autoDialEnabled)}
+                >
+                  <Text style={styles.punchBtnText}>{autoDialEnabled ? 'ACTIVE' : 'INACTIVE'}</Text>
+                </TouchableOpacity>
+              </View>
+
               {/* Daily Target Progress */}
               <View style={styles.targetCard}>
                 <Text style={styles.targetTitle}>Today's Target Progress</Text>
@@ -528,8 +610,41 @@ export default function App() {
           {/* DISPOSITION FORM */}
           {screen === 'disposition' && (
             <ScrollView contentContainerStyle={styles.content}>
-              <Text style={styles.sectionHeader}>Log Call Disposition</Text>
+              <Text style={styles.sectionHeader}>Log Call Outcome</Text>
+              <View style={styles.dispositionContainer}>
+                {['interested', 'callback', 'not_interested', 'dnc'].map((status) => (
+                  <TouchableOpacity
+                    key={status}
+                    style={[
+                      styles.dispositionBtn,
+                      disposition === status && styles.dispositionBtnSelected
+                    ]}
+                    onPress={() => setDisposition(status)}
+                  >
+                    <Text style={[
+                      styles.dispositionBtnText,
+                      disposition === status && styles.dispositionBtnTextSelected
+                    ]}>
+                      {status.replace('_', ' ').toUpperCase()}
+                    </Text>
+                  </TouchableOpacity>
+                ))}
+              </View>
 
+              {disposition === 'callback' && (
+                <View style={{ marginBottom: 20 }}>
+                  <Text style={styles.sectionHeader}>Callback Time (e.g. YYYY-MM-DD HH:MM)</Text>
+                  <TextInput
+                    style={[styles.input, { backgroundColor: '#fff', borderWidth: 1, borderColor: '#e2e8f0', color: '#1e293b', marginBottom: 10 }]}
+                    placeholder="2026-07-08 17:00"
+                    placeholderTextColor="#94a3b8"
+                    value={callbackTime}
+                    onChangeText={setCallbackTime}
+                  />
+                </View>
+              )}
+
+              <Text style={styles.sectionHeader}>Call Notes</Text>
               <TextInput
                 style={styles.notesInput}
                 placeholder="Enter call notes..."
@@ -542,6 +657,13 @@ export default function App() {
 
               <TouchableOpacity style={styles.saveBtn} onPress={handleSaveDisposition}>
                 <Text style={styles.saveBtnText}>Save & Next Lead</Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity 
+                style={[styles.saveBtn, { backgroundColor: '#25d366', marginTop: 12 }]} 
+                onPress={() => sendWhatsApp(currentLead, disposition)}
+              >
+                <Text style={styles.saveBtnText}>Send WhatsApp Follow-up</Text>
               </TouchableOpacity>
             </ScrollView>
           )}
@@ -559,6 +681,56 @@ export default function App() {
             </View>
           )}
         </View>
+      )}
+
+      {/* Callbacks Drawer Modal */}
+      {showCallbacksDrawer && (
+        <Modal
+          animationType="slide"
+          transparent={true}
+          visible={showCallbacksDrawer}
+          onRequestClose={() => setShowCallbacksDrawer(false)}
+        >
+          <View style={styles.modalOverlay}>
+            <View style={styles.modalContentContainer}>
+              <View style={styles.modalHeader}>
+                <Text style={styles.modalHeaderTitle}>Callback Reminders</Text>
+                <TouchableOpacity onPress={() => setShowCallbacksDrawer(false)}>
+                  <Text style={styles.closeBtnText}>Close</Text>
+                </TouchableOpacity>
+              </View>
+              <ScrollView style={{ flex: 1, padding: 16 }}>
+                {callbacksList.length === 0 ? (
+                  <Text style={styles.noCallbacksText}>No scheduled callbacks for today.</Text>
+                ) : (
+                  callbacksList.map((cb) => (
+                    <View key={cb.id} style={styles.callbackItemCard}>
+                      <View style={{ flex: 1, paddingRight: 8 }}>
+                        <Text style={styles.callbackLeadName}>{cb.name}</Text>
+                        <Text style={styles.callbackLeadPhone}>{cb.phone}</Text>
+                        {cb.callbackTime && (
+                          <Text style={styles.callbackTimeText}>
+                            Time: {new Date(cb.callbackTime).toLocaleString()}
+                          </Text>
+                        )}
+                      </View>
+                      <TouchableOpacity
+                        style={styles.callbackCallBtn}
+                        onPress={() => {
+                          setShowCallbacksDrawer(false);
+                          setCurrentLead(cb);
+                          startDialing(cb);
+                        }}
+                      >
+                        <Text style={styles.callbackCallBtnText}>Call</Text>
+                      </TouchableOpacity>
+                    </View>
+                  ))
+                )}
+              </ScrollView>
+            </View>
+          </View>
+        </Modal>
       )}
     </SafeAreaView>
   );
@@ -706,6 +878,35 @@ const styles = StyleSheet.create({
     fontWeight: 'bold',
     color: '#334155',
     marginTop: 4
+  },
+  dispositionContainer: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    justifyContent: 'space-between',
+    marginBottom: 20
+  },
+  dispositionBtn: {
+    width: '48%',
+    height: 44,
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: '#e2e8f0',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#fff',
+    marginBottom: 8
+  },
+  dispositionBtnSelected: {
+    backgroundColor: '#7c3aed',
+    borderColor: '#7c3aed'
+  },
+  dispositionBtnText: {
+    fontSize: 11,
+    fontWeight: 'bold',
+    color: '#64748b'
+  },
+  dispositionBtnTextSelected: {
+    color: '#fff'
   },
   attendanceStatusText: {
     fontSize: 12,
@@ -902,6 +1103,81 @@ const styles = StyleSheet.create({
   saveBtnText: {
     color: '#fff',
     fontSize: 16,
+    fontWeight: 'bold'
+  },
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.5)',
+    justifyContent: 'flex-end'
+  },
+  modalContentContainer: {
+    backgroundColor: '#f8fafc',
+    borderTopLeftRadius: 24,
+    borderTopRightRadius: 24,
+    height: '70%',
+    paddingTop: 16
+  },
+  modalHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingHorizontal: 20,
+    paddingBottom: 16,
+    borderBottomWidth: 1,
+    borderBottomColor: '#e2e8f0'
+  },
+  modalHeaderTitle: {
+    fontSize: 16,
+    fontWeight: 'bold',
+    color: '#1e293b'
+  },
+  closeBtnText: {
+    fontSize: 14,
+    fontWeight: 'bold',
+    color: '#ef4444'
+  },
+  noCallbacksText: {
+    fontSize: 13,
+    color: '#64748b',
+    textAlign: 'center',
+    marginTop: 40
+  },
+  callbackItemCard: {
+    backgroundColor: '#fff',
+    borderRadius: 16,
+    padding: 16,
+    marginBottom: 12,
+    borderWidth: 1,
+    borderColor: '#e2e8f0',
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center'
+  },
+  callbackLeadName: {
+    fontSize: 14,
+    fontWeight: 'bold',
+    color: '#1e293b'
+  },
+  callbackLeadPhone: {
+    fontSize: 12,
+    color: '#64748b',
+    marginTop: 2
+  },
+  callbackTimeText: {
+    fontSize: 11,
+    color: '#f59e0b',
+    fontWeight: 'bold',
+    marginTop: 4
+  },
+  callbackCallBtn: {
+    backgroundColor: '#10b981',
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    borderRadius: 8
+  },
+  callbackCallBtnText: {
+    color: '#fff',
+    fontSize: 12,
     fontWeight: 'bold'
   },
   countdownContent: {
