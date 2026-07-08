@@ -15,6 +15,7 @@ import {
 } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
 import { io } from 'socket.io-client';
+import * as Location from 'expo-location';
 
 const API_URL = 'https://dial-flow-crm.onrender.com'; // Deployed live Render backend URL
 
@@ -28,12 +29,27 @@ export default function App() {
   // App screen flow
   const [screen, setScreen] = useState('login'); // 'login' | 'dialer' | 'active_call' | 'disposition' | 'countdown'
 
-  // Lead calling details
+  // Dialer data
   const [currentLead, setCurrentLead] = useState(null);
   const [targetCalls, setTargetCalls] = useState(150);
   const [completedToday, setCompletedToday] = useState(0);
 
-  // Dialer & Form states
+  // Calling Stats
+  const [stats, setStats] = useState({
+    leadRemaining: 0,
+    totalCalls: 0,
+    connected: 0,
+    callbacks: 0,
+    notInterested: 0
+  });
+
+  // Attendance Punch
+  const [attendance, setAttendance] = useState(null);
+  const [punchedIn, setPunchedIn] = useState(false);
+  const [punchedOut, setPunchedOut] = useState(false);
+  const [punchLoading, setPunchLoading] = useState(false);
+
+  // Call & disposition timer state
   const [callTimer, setCallTimer] = useState(0);
   const [countdown, setCountdown] = useState(20);
   const [disposition, setDisposition] = useState('interested');
@@ -77,6 +93,7 @@ export default function App() {
         setUser(data.user);
         connectSocket(data.user.id, data.user.name);
         fetchNextLead(data.token);
+        fetchAttendanceStatus(data.token);
         setScreen('dialer');
       } else {
         Alert.alert('Error', data.message || 'Invalid credentials');
@@ -85,6 +102,80 @@ export default function App() {
       Alert.alert('Connection Error', 'Ensure the server backend is running and URL is set correctly.');
     } finally {
       setLoading(false);
+    }
+  };
+
+  const fetchAttendanceStatus = async (authToken) => {
+    try {
+      const response = await fetch(`${API_URL}/api/attendance/today`, {
+        headers: { Authorization: `Bearer ${authToken || token}` }
+      });
+      const data = await response.json();
+      if (data.success) {
+        setPunchedIn(data.punchedIn);
+        setPunchedOut(data.punchedOut);
+        setAttendance(data.attendance);
+      }
+    } catch (e) {
+      console.log('Error fetching attendance status:', e);
+    }
+  };
+
+  const handlePunch = async () => {
+    setPunchLoading(true);
+    try {
+      if (!punchedIn) {
+        // Request GPS Location Permissions!
+        const { status } = await Location.requestForegroundPermissionsAsync();
+        if (status !== 'granted') {
+          Alert.alert('Permission Denied', 'GPS Location permission is required to punch in.');
+          setPunchLoading(false);
+          return;
+        }
+
+        // Get coordinates
+        const locationData = await Location.getCurrentPositionAsync({});
+        const { latitude, longitude } = locationData.coords;
+
+        const res = await fetch(`${API_URL}/api/attendance/punch-in`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            Authorization: `Bearer ${token}`
+          },
+          body: JSON.stringify({ latitude, longitude })
+        });
+        const data = await res.json();
+        if (data.success) {
+          setPunchedIn(true);
+          setAttendance(data.attendance);
+          Alert.alert('Punched In', 'Successfully marked attendance.');
+        } else {
+          Alert.alert('Error', data.message || 'Failed to punch in.');
+        }
+      } else {
+        // Punch Out
+        const res = await fetch(`${API_URL}/api/attendance/punch-out`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            Authorization: `Bearer ${token}`
+          }
+        });
+        const data = await res.json();
+        if (data.success) {
+          setPunchedOut(true);
+          setAttendance(data.attendance);
+          Alert.alert('Punched Out', 'Shift completed successfully.');
+        } else {
+          Alert.alert('Error', data.message || 'Failed to punch out.');
+        }
+      }
+    } catch (e) {
+      console.log(e);
+      Alert.alert('Error', 'Connection failed to record attendance.');
+    } finally {
+      setPunchLoading(false);
     }
   };
 
@@ -98,6 +189,9 @@ export default function App() {
         setCurrentLead(data.lead);
         setTargetCalls(data.target || 150);
         setCompletedToday(data.completedToday || 0);
+        if (data.stats) {
+          setStats(data.stats);
+        }
       }
     } catch (e) {
       console.log('Error fetching lead:', e);
@@ -330,9 +424,58 @@ export default function App() {
           {/* SCREEN CONTENT */}
           {screen === 'dialer' && (
             <ScrollView contentContainerStyle={styles.content}>
+              {/* Attendance Card */}
+              <View style={styles.targetCard}>
+                <Text style={styles.targetTitle}>Attendance Status</Text>
+                <Text style={styles.attendanceStatusText}>
+                  {punchedIn 
+                    ? punchedOut 
+                      ? 'Shift Completed' 
+                      : `Punched In (GPS Lat/Lng: ${attendance?.latitude?.toFixed(2)}, ${attendance?.longitude?.toFixed(2)})`
+                    : 'Not Punched In'}
+                </Text>
+                {!punchedOut ? (
+                  <TouchableOpacity
+                    style={[styles.punchBtn, punchedIn ? styles.punchOutBtn : styles.punchInBtn]}
+                    onPress={handlePunch}
+                    disabled={punchLoading}
+                  >
+                    {punchLoading ? (
+                      <ActivityIndicator color="#fff" />
+                    ) : (
+                      <Text style={styles.punchBtnText}>{punchedIn ? 'Punch Out' : 'Punch In (Current Location)'}</Text>
+                    )}
+                  </TouchableOpacity>
+                ) : (
+                  <View style={styles.punchCompletedContainer}>
+                    <Text style={styles.punchCompletedText}>Today's Shift Ended</Text>
+                  </View>
+                )}
+              </View>
+
+              {/* Call Stats Grid Card */}
+              <View style={styles.statsCardGrid}>
+                <View style={styles.statMiniCard}>
+                  <Text style={styles.statLabel}>Lead Left</Text>
+                  <Text style={styles.statNumber}>{stats.leadRemaining}</Text>
+                </View>
+                <View style={styles.statMiniCard}>
+                  <Text style={styles.statLabel}>Total Call</Text>
+                  <Text style={styles.statNumber}>{stats.totalCalls}</Text>
+                </View>
+                <View style={styles.statMiniCard}>
+                  <Text style={styles.statLabel}>Connect</Text>
+                  <Text style={[styles.statNumber, {color: '#10b981'}]}>{stats.connected}</Text>
+                </View>
+                <View style={styles.statMiniCard}>
+                  <Text style={styles.statLabel}>Callbacks</Text>
+                  <Text style={[styles.statNumber, {color: '#f59e0b'}]}>{stats.callbacks}</Text>
+                </View>
+              </View>
+
               {/* Daily Target Progress */}
               <View style={styles.targetCard}>
-                <Text style={styles.targetTitle}>Today's Target</Text>
+                <Text style={styles.targetTitle}>Today's Target Progress</Text>
                 <Text style={styles.targetProgress}>{completedToday} / {targetCalls} Calls</Text>
               </View>
 
@@ -353,11 +496,16 @@ export default function App() {
 
               {/* Call buttons */}
               <TouchableOpacity
-                style={[styles.callBtn, !currentLead && styles.callBtnDisabled]}
+                style={[
+                  styles.callBtn, 
+                  (!currentLead || user?.status !== 'online' || !punchedIn || punchedOut) && styles.callBtnDisabled
+                ]}
                 onPress={startDialing}
-                disabled={!currentLead}
+                disabled={!currentLead || user?.status !== 'online' || !punchedIn || punchedOut}
               >
-                <Text style={styles.callBtnText}>Call Now</Text>
+                <Text style={styles.callBtnText}>
+                  {!punchedIn ? 'Punch In First to Call' : punchedOut ? 'Shift Ended' : 'Call Now'}
+                </Text>
               </TouchableOpacity>
             </ScrollView>
           )}
@@ -558,6 +706,73 @@ const styles = StyleSheet.create({
     fontWeight: 'bold',
     color: '#334155',
     marginTop: 4
+  },
+  attendanceStatusText: {
+    fontSize: 12,
+    color: '#64748b',
+    marginTop: 4,
+    fontWeight: '500'
+  },
+  punchBtn: {
+    height: 40,
+    borderRadius: 10,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginTop: 12
+  },
+  punchInBtn: {
+    backgroundColor: '#10b981'
+  },
+  punchOutBtn: {
+    backgroundColor: '#ef4444'
+  },
+  punchBtnText: {
+    color: '#fff',
+    fontSize: 13,
+    fontWeight: 'bold'
+  },
+  punchCompletedContainer: {
+    backgroundColor: '#f1f5f9',
+    height: 40,
+    borderRadius: 10,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginTop: 12,
+    borderWidth: 1,
+    borderColor: '#cbd5e1'
+  },
+  punchCompletedText: {
+    color: '#94a3b8',
+    fontSize: 13,
+    fontWeight: 'bold'
+  },
+  statsCardGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    justifyContent: 'space-between',
+    marginBottom: 20
+  },
+  statMiniCard: {
+    backgroundColor: '#fff',
+    width: '48%',
+    borderRadius: 16,
+    padding: 16,
+    marginBottom: 12,
+    borderWidth: 1,
+    borderColor: '#e2e8f0',
+    elevation: 1
+  },
+  statLabel: {
+    fontSize: 10,
+    fontWeight: 'bold',
+    color: '#94a3b8',
+    textTransform: 'uppercase'
+  },
+  statNumber: {
+    fontSize: 20,
+    fontWeight: 'bold',
+    color: '#334155',
+    marginTop: 8
   },
   sectionHeader: {
     fontSize: 11,

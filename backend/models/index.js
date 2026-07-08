@@ -4,6 +4,7 @@ const Lead = require('./Lead');
 const Call = require('./Call');
 const Dnc = require('./Dnc');
 const Target = require('./Target');
+const Attendance = require('./Attendance');
 
 // Relationships
 
@@ -27,11 +28,16 @@ Target.belongsTo(User, { foreignKey: 'agentId', as: 'agent' });
 User.hasMany(Dnc, { foreignKey: 'addedBy', as: 'addedDncs' });
 Dnc.belongsTo(User, { foreignKey: 'addedBy', as: 'creator' });
 
+// Agent - Attendance relationship
+User.hasMany(Attendance, { foreignKey: 'agentId', as: 'attendances' });
+Attendance.belongsTo(User, { foreignKey: 'agentId', as: 'agent' });
+
 module.exports = {
   sequelize,
   User,
   Lead,
   Call,
   Dnc,
-  Target
+  Target,
+  Attendance
 };

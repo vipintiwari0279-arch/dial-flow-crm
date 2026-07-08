@@ -16,6 +16,7 @@ import LiveMonitoring from './pages/LiveMonitoring';
 import Callbacks from './pages/Callbacks';
 import DncList from './pages/DncList';
 import AgentSimulator from './pages/AgentSimulator';
+import AttendanceLogs from './pages/AttendanceLogs';
 
 const ProtectedRoute = ({ children, allowedRoles }) => {
   const { user, loading } = useAuth();
@@ -83,6 +84,13 @@ const AppContent = () => {
           <ProtectedRoute allowedRoles={['admin']}>
             <AdminLayout>
               <DistributeLeads />
+            </AdminLayout>
+          </ProtectedRoute>
+        } />
+        <Route path="/admin/attendance" element={
+          <ProtectedRoute allowedRoles={['admin']}>
+            <AdminLayout>
+              <AttendanceLogs />
             </AdminLayout>
           </ProtectedRoute>
         } />

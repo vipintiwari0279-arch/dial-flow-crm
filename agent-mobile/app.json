@@ -1,0 +1,12 @@
+{
+  "expo": {
+    "extra": {
+      "eas": {
+        "projectId": "60d236b8-25b1-4658-96ee-780fa714ffe8"
+      }
+    },
+    "android": {
+      "package": "com.vipin0279.dialflowagentapp"
+    }
+  }
+}

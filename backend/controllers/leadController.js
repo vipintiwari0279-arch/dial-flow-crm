@@ -1,4 +1,4 @@
-const { Lead, User, Dnc, Target } = require('../models');
+const { Lead, User, Dnc, Target, Call } = require('../models');
 const { Op } = require('sequelize');
 const fs = require('fs');
 const csv = require('csv-parser');
@@ -256,7 +256,7 @@ exports.getNextAgentLead = async (req, res) => {
     });
 
     const { start, end } = getTodayRangeHelper();
-    const totalCalls = await Lead.count({
+    const completedToday = await Lead.count({
       where: {
         allocatedTo: agentId,
         status: 'called',
@@ -264,11 +264,42 @@ exports.getNextAgentLead = async (req, res) => {
       }
     });
 
+    // Extended Stats
+    const leadRemaining = await Lead.count({
+      where: { allocatedTo: agentId, status: 'allocated' }
+    });
+
+    const totalCalls = await Call.count({
+      where: { agentId }
+    });
+
+    const connected = await Call.count({
+      where: {
+        agentId,
+        disposition: { [Op.in]: ['interested', 'callback'] }
+      }
+    });
+
+    const callbacks = await Call.count({
+      where: { agentId, disposition: 'callback' }
+    });
+
+    const notInterested = await Call.count({
+      where: { agentId, disposition: 'not_interested' }
+    });
+
     res.status(200).json({
       success: true,
       lead,
       target: target ? target.targetCalls : 150,
-      completedToday: totalCalls
+      completedToday,
+      stats: {
+        leadRemaining,
+        totalCalls,
+        connected,
+        callbacks,
+        notInterested
+      }
     });
   } catch (error) {
     console.error('Get next lead error:', error);

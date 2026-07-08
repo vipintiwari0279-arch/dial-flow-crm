@@ -15,7 +15,9 @@ import {
   ChevronRight,
   LogOut,
   Calendar,
-  AlertCircle
+  AlertCircle,
+  MapPin,
+  Fingerprint
 } from 'lucide-react';
 
 const AgentSimulator = () => {
@@ -31,6 +33,21 @@ const AgentSimulator = () => {
   const [currentLead, setCurrentLead] = useState(null);
   const [targetCalls, setTargetCalls] = useState(150);
   const [completedToday, setCompletedToday] = useState(0);
+
+  // Extended Stats State
+  const [stats, setStats] = useState({
+    leadRemaining: 0,
+    totalCalls: 0,
+    connected: 0,
+    callbacks: 0,
+    notInterested: 0
+  });
+
+  // Attendance punch states
+  const [attendance, setAttendance] = useState(null);
+  const [punchedIn, setPunchedIn] = useState(false);
+  const [punchedOut, setPunchedOut] = useState(false);
+  const [punchLoading, setPunchLoading] = useState(false);
 
   // Dialer & Call state
   const [callTimer, setCallTimer] = useState(0);
@@ -105,11 +122,103 @@ const AgentSimulator = () => {
 
         connectSimulatorSocket(data.user.id, data.user.name);
         fetchAgentNextLead(data.token);
+        fetchAttendanceStatus(data.token);
       } else {
         setErrorMsg(data.message || 'Login failed. Check server status.');
       }
     } catch (err) {
       setErrorMsg('Failed to connect to authentication API.');
+    }
+  };
+
+  const fetchAttendanceStatus = async (authToken) => {
+    try {
+      const response = await fetch('/api/attendance/today', {
+        headers: { 'Authorization': `Bearer ${authToken || token}` }
+      });
+      const data = await response.json();
+      if (data.success) {
+        setPunchedIn(data.punchedIn);
+        setPunchedOut(data.punchedOut);
+        setAttendance(data.attendance);
+      }
+    } catch (e) {
+      console.error('Error fetching attendance status:', e);
+    }
+  };
+
+  const handlePunch = async () => {
+    setPunchLoading(true);
+    try {
+      if (!punchedIn) {
+        // Punch In! Get browser Geolocation coordinates
+        navigator.geolocation.getCurrentPosition(
+          async (pos) => {
+            const { latitude, longitude } = pos.coords;
+            try {
+              const res = await fetch('/api/attendance/punch-in', {
+                method: 'POST',
+                headers: {
+                  'Content-Type': 'application/json',
+                  'Authorization': `Bearer ${token}`
+                },
+                body: JSON.stringify({ latitude, longitude })
+              });
+              const data = await res.json();
+              if (data.success) {
+                setPunchedIn(true);
+                setAttendance(data.attendance);
+              }
+            } catch (err) {
+              console.error(err);
+            } finally {
+              setPunchLoading(false);
+            }
+          },
+          async (err) => {
+            // Geolocation permission denied or failed, fallback to default coordinates (e.g. Kanpur coordinates)
+            const latitude = 26.4499;
+            const longitude = 80.3319;
+            try {
+              const res = await fetch('/api/attendance/punch-in', {
+                method: 'POST',
+                headers: {
+                  'Content-Type': 'application/json',
+                  'Authorization': `Bearer ${token}`
+                },
+                body: JSON.stringify({ latitude, longitude })
+              });
+              const data = await res.json();
+              if (data.success) {
+                setPunchedIn(true);
+                setAttendance(data.attendance);
+              }
+            } catch (err) {
+              console.error(err);
+            } finally {
+              setPunchLoading(false);
+            }
+          }
+        );
+      } else {
+        // Punch Out!
+        const res = await fetch('/api/attendance/punch-out', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${token}`
+          }
+        });
+        const data = await res.json();
+        if (data.success) {
+          setPunchedOut(true);
+          setAttendance(data.attendance);
+        }
+        setPunchLoading(false);
+      }
+    } catch (e) {
+      console.error(e);
+      setPunchLoading(false);
     }
   };
 
@@ -123,6 +232,9 @@ const AgentSimulator = () => {
         setCurrentLead(data.lead);
         setTargetCalls(data.target || 150);
         setCompletedToday(data.completedToday || 0);
+        if (data.stats) {
+          setStats(data.stats);
+        }
       }
     } catch (e) {
       console.error('Error fetching lead:', e);
@@ -460,63 +572,132 @@ const AgentSimulator = () => {
                   {screen === 'home' && (
                     /* 1. App home / Dial standby */
                     <div className="flex-1 flex flex-col justify-between">
-                      {/* Welcome card & wheel */}
-                      <div className="bg-white rounded-3xl border border-slate-200/80 p-4 shadow-sm flex items-center justify-between">
-                        <div>
-                          <p className="text-[10px] font-semibold text-slate-400">Good Morning,</p>
-                          <p className="text-sm font-extrabold text-slate-700 mt-0.5">{agentUser.name}</p>
-                          <p className="text-[10px] text-slate-400 mt-2 font-semibold">Today's Target Progress</p>
-                          <p className="text-xs font-extrabold text-slate-700 mt-0.5">{completedToday} / {targetCalls} Calls</p>
+                      <div className="space-y-4">
+                        {/* Welcome card & wheel */}
+                        <div className="bg-white rounded-3xl border border-slate-200/80 p-4 shadow-sm flex items-center justify-between">
+                          <div>
+                            <p className="text-[10px] font-semibold text-slate-400">Good Morning,</p>
+                            <p className="text-sm font-extrabold text-slate-700 mt-0.5">{agentUser.name}</p>
+                            <p className="text-[10px] text-slate-400 mt-2 font-semibold">Today's Target Progress</p>
+                            <p className="text-xs font-extrabold text-slate-700 mt-0.5">{completedToday} / {targetCalls} Calls</p>
+                          </div>
+                          {/* Target circular tracker */}
+                          <div className="relative flex items-center justify-center">
+                            <svg className="w-20 h-20 transform -rotate-90">
+                              <circle className="text-slate-100" strokeWidth={stroke} stroke="currentColor" fill="transparent" r={normalizedRadius} cx={radius} cy={radius} />
+                              <circle className="text-emerald-500" strokeWidth={stroke} strokeDasharray={circumference + ' ' + circumference} style={{ strokeDashoffset }} strokeLinecap="round" stroke="currentColor" fill="transparent" r={normalizedRadius} cx={radius} cy={radius} />
+                            </svg>
+                            <span className="absolute font-black text-xs text-slate-700">{progressPercent}%</span>
+                          </div>
                         </div>
-                        {/* Target circular tracker */}
-                        <div className="relative flex items-center justify-center">
-                          <svg className="w-20 h-20 transform -rotate-90">
-                            <circle className="text-slate-100" strokeWidth={stroke} stroke="currentColor" fill="transparent" r={normalizedRadius} cx={radius} cy={radius} />
-                            <circle className="text-emerald-500" strokeWidth={stroke} strokeDasharray={circumference + ' ' + circumference} style={{ strokeDashoffset }} strokeLinecap="round" stroke="currentColor" fill="transparent" r={normalizedRadius} cx={radius} cy={radius} />
-                          </svg>
-                          <span className="absolute font-black text-xs text-slate-700">{progressPercent}%</span>
-                        </div>
-                      </div>
 
-                      {/* Allocated Lead Card */}
-                      <div className="my-6">
-                        <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-2">Current Allocated Lead</p>
-                        {currentLead ? (
-                          <div className="bg-white rounded-3xl border border-slate-200/80 p-5 shadow-sm space-y-4">
-                            <div className="flex items-center gap-3">
-                              <div className="w-10 h-10 rounded-full bg-slate-100 flex items-center justify-center text-slate-500 shrink-0">
-                                <User className="w-5 h-5" />
-                              </div>
+                        {/* Attendance Punch Section */}
+                        <div className="bg-white rounded-3xl border border-slate-200/80 p-4 shadow-sm space-y-3">
+                          <div className="flex items-center justify-between">
+                            <div className="flex items-center gap-2">
+                              <Fingerprint className="w-5 h-5 text-brand-600 animate-pulse" />
                               <div>
-                                <h5 className="font-extrabold text-sm text-slate-800">{currentLead.name}</h5>
-                                <p className="text-xs font-mono font-medium text-slate-500 mt-0.5">{currentLead.phone}</p>
+                                <p className="text-[10px] font-bold text-slate-700">Attendance Status</p>
+                                <p className="text-[9px] font-semibold text-slate-400">
+                                  {punchedIn 
+                                    ? punchedOut 
+                                      ? 'Shift Ended' 
+                                      : `Punched In at ${new Date(attendance?.punchInTime).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}`
+                                    : 'Not Punched In'}
+                                </p>
                               </div>
                             </div>
-                            <div className="grid grid-cols-2 gap-2 text-[10px] font-semibold text-slate-400 border-t border-slate-50 pt-3">
-                              <div>City: <span className="text-slate-600 font-bold">{currentLead.city || '-'}</span></div>
-                              <div>State: <span className="text-slate-600 font-bold">{currentLead.state || '-'}</span></div>
-                              <div className="col-span-2">Lead ID: <span className="text-slate-600 font-mono font-bold">{currentLead.id.slice(0, 8)}</span></div>
+                            {punchedIn && attendance?.latitude && (
+                              <div className="flex items-center gap-0.5 text-[8px] text-slate-400 font-bold bg-slate-100 py-1 px-2 rounded-lg">
+                                <MapPin className="w-3 h-3 text-emerald-500" />
+                                <span>{attendance.latitude.toFixed(2)}, {attendance.longitude.toFixed(2)}</span>
+                              </div>
+                            )}
+                          </div>
+
+                          {!punchedOut ? (
+                            <button
+                              onClick={handlePunch}
+                              disabled={punchLoading}
+                              className={`w-full py-2.5 rounded-xl text-xs font-bold text-white transition-all hover-scale flex justify-center items-center gap-2 ${
+                                punchedIn 
+                                  ? 'bg-gradient-to-r from-rose-600 to-rose-500 hover:from-rose-700 hover:to-rose-600 shadow-md shadow-rose-500/10' 
+                                  : 'bg-gradient-to-r from-emerald-600 to-emerald-500 hover:from-emerald-700 hover:to-emerald-600 shadow-md shadow-emerald-500/10'
+                              }`}
+                            >
+                              {punchLoading ? (
+                                <span className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin"></span>
+                              ) : (
+                                <span>{punchedIn ? 'Punch Out' : 'Punch In (GPS Location)'}</span>
+                              )}
+                            </button>
+                          ) : (
+                            <div className="w-full py-2.5 rounded-xl text-xs font-bold text-slate-400 bg-slate-100 flex items-center justify-center gap-2 border border-slate-200/40">
+                              <span>Shift Ended</span>
                             </div>
+                          )}
+                        </div>
+
+                        {/* Dashboard Rich Stats Grid */}
+                        <div className="grid grid-cols-2 gap-3">
+                          <div className="p-3 bg-white rounded-2xl border border-slate-200/80 shadow-sm flex flex-col justify-between h-20">
+                            <span className="text-[9px] font-bold text-slate-400 uppercase tracking-wider">Remaining Leads</span>
+                            <span className="text-xl font-black text-slate-700 mt-auto leading-none">{stats.leadRemaining}</span>
                           </div>
-                        ) : (
-                          <div className="bg-amber-50 rounded-3xl border border-amber-100 p-5 text-center text-amber-700 shadow-sm space-y-2">
-                            <AlertCircle className="w-8 h-8 text-amber-500 mx-auto" />
-                            <h5 className="font-extrabold text-xs">No Allocated Leads</h5>
-                            <p className="text-[10px] font-medium text-amber-600 leading-relaxed">
-                              You do not have any allocated leads. Please ask Admin to distribute leads to trigger updates.
-                            </p>
+                          <div className="p-3 bg-white rounded-2xl border border-slate-200/80 shadow-sm flex flex-col justify-between h-20">
+                            <span className="text-[9px] font-bold text-slate-400 uppercase tracking-wider">Total Calls</span>
+                            <span className="text-xl font-black text-slate-700 mt-auto leading-none">{stats.totalCalls}</span>
                           </div>
-                        )}
+                          <div className="p-3 bg-white rounded-2xl border border-slate-200/80 shadow-sm flex flex-col justify-between h-20">
+                            <span className="text-[9px] font-bold text-slate-400 uppercase tracking-wider">Connected</span>
+                            <span className="text-xl font-black text-emerald-600 mt-auto leading-none">{stats.connected}</span>
+                          </div>
+                          <div className="p-3 bg-white rounded-2xl border border-slate-200/80 shadow-sm flex flex-col justify-between h-20">
+                            <span className="text-[9px] font-bold text-slate-400 uppercase tracking-wider">Callbacks</span>
+                            <span className="text-xl font-black text-amber-500 mt-auto leading-none">{stats.callbacks}</span>
+                          </div>
+                        </div>
+
+                        {/* Allocated Lead Card */}
+                        <div>
+                          <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-2">Current Allocated Lead</p>
+                          {currentLead ? (
+                            <div className="bg-white rounded-3xl border border-slate-200/80 p-5 shadow-sm space-y-4">
+                              <div className="flex items-center gap-3">
+                                <div className="w-10 h-10 rounded-full bg-slate-100 flex items-center justify-center text-slate-500 shrink-0">
+                                  <User className="w-5 h-5" />
+                                </div>
+                                <div>
+                                  <h5 className="font-extrabold text-sm text-slate-800">{currentLead.name}</h5>
+                                  <p className="text-xs font-mono font-medium text-slate-500 mt-0.5">{currentLead.phone}</p>
+                                </div>
+                              </div>
+                              <div className="grid grid-cols-2 gap-2 text-[10px] font-semibold text-slate-400 border-t border-slate-50 pt-3">
+                                <div>City: <span className="text-slate-600 font-bold">{currentLead.city || '-'}</span></div>
+                                <div>State: <span className="text-slate-600 font-bold">{currentLead.state || '-'}</span></div>
+                                <div className="col-span-2">Lead ID: <span className="text-slate-600 font-mono font-bold">{currentLead.id.slice(0, 8)}</span></div>
+                              </div>
+                            </div>
+                          ) : (
+                            <div className="bg-amber-50 rounded-3xl border border-amber-100 p-5 text-center text-amber-700 shadow-sm space-y-2">
+                              <AlertCircle className="w-8 h-8 text-amber-500 mx-auto" />
+                              <h5 className="font-extrabold text-xs">No Allocated Leads</h5>
+                              <p className="text-[10px] font-medium text-amber-600 leading-relaxed">
+                                You do not have any allocated leads. Please ask Admin to distribute leads to trigger updates.
+                              </p>
+                            </div>
+                          )}
+                        </div>
                       </div>
 
                       {/* Dialer triggers */}
                       <button
                         onClick={handleDial}
-                        disabled={!currentLead || agentUser.status !== 'online'}
-                        className="w-full py-4 rounded-2xl bg-emerald-500 hover:bg-emerald-600 disabled:opacity-40 disabled:cursor-not-allowed text-white font-extrabold text-sm flex items-center justify-center gap-2 shadow-lg shadow-emerald-500/20 transition-all hover-scale"
+                        disabled={!currentLead || agentUser.status !== 'online' || !punchedIn || punchedOut}
+                        className="w-full py-4 rounded-2xl bg-emerald-500 hover:bg-emerald-600 disabled:opacity-40 disabled:cursor-not-allowed text-white font-extrabold text-sm flex items-center justify-center gap-2 shadow-lg shadow-emerald-500/20 transition-all hover-scale mt-4"
                       >
                         <Phone className="w-4 h-4 fill-white" />
-                        <span>Call Now</span>
+                        <span>{!punchedIn ? 'Punch In First to Call' : punchedOut ? 'Shift Ended' : 'Call Now'}</span>
                       </button>
                     </div>
                   )}
