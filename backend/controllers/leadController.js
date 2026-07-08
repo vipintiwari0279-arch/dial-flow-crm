@@ -1,4 +1,4 @@
-const { Lead, User, Dnc } = require('../models');
+const { Lead, User, Dnc, Target } = require('../models');
 const { Op } = require('sequelize');
 const fs = require('fs');
 const csv = require('csv-parser');
