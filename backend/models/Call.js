@@ -26,6 +26,10 @@ const Call = sequelize.define('Call', {
   notes: {
     type: DataTypes.TEXT,
     allowNull: true
+  },
+  recordingUrl: {
+    type: DataTypes.STRING,
+    allowNull: true
   }
 });
 

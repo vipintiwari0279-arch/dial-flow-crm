@@ -19,6 +19,7 @@ import { StatusBar } from 'expo-status-bar';
 import { io } from 'socket.io-client';
 import * as Location from 'expo-location';
 import RNImmediatePhoneCall from 'react-native-immediate-phone-call';
+import CallDetectorManager from 'react-native-call-detector';
 
 const API_URL = 'https://dial-flow-crm.onrender.com'; // Deployed live Render backend URL
 
@@ -31,6 +32,19 @@ export default function App() {
 
   // App screen flow
   const [screen, setScreen] = useState('login'); // 'login' | 'dialer' | 'active_call' | 'disposition' | 'countdown'
+  const [activeTab, setActiveTab] = useState('calling'); // 'calling' | 'hrms'
+
+  // Leave Form inputs
+  const [leaveType, setLeaveType] = useState('sick');
+  const [leaveStart, setLeaveStart] = useState('');
+  const [leaveEnd, setLeaveEnd] = useState('');
+  const [leaveReason, setLeaveReason] = useState('');
+  const [leaveHistory, setLeaveHistory] = useState([]);
+  const [leaveSuccess, setLeaveSuccess] = useState('');
+  const [leaveError, setLeaveError] = useState('');
+
+  // Call detector ref
+  const callDetectorRef = useRef(null);
 
   // Dialer data
   const [currentLead, setCurrentLead] = useState(null);
@@ -203,6 +217,7 @@ export default function App() {
         fetchNextLead(data.token);
         fetchAttendanceStatus(data.token);
         fetchOutcomesList(data.token);
+        fetchLeaveHistory(data.token);
         setScreen('dialer');
       } else {
         Alert.alert('Error', data.message || 'Invalid credentials');
@@ -244,6 +259,60 @@ export default function App() {
       }
     } catch (e) {
       console.log('Error fetching attendance status:', e);
+    }
+  };
+
+  const fetchLeaveHistory = async (authToken) => {
+    try {
+      const response = await fetch(`${API_URL}/api/hrms/leave`, {
+        headers: { Authorization: `Bearer ${authToken || token}` }
+      });
+      const data = await response.json();
+      if (data.success) {
+        setLeaveHistory(data.leaves);
+      }
+    } catch (e) {
+      console.log('Error fetching leave history:', e);
+    }
+  };
+
+  const handleApplyLeave = async () => {
+    setLeaveError('');
+    setLeaveSuccess('');
+    try {
+      const res = await fetch(`${API_URL}/api/hrms/leave`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`
+        },
+        body: JSON.stringify({
+          leaveType,
+          startDate: leaveStart,
+          endDate: leaveEnd,
+          reason: leaveReason
+        })
+      });
+      const data = await res.json();
+      if (data.success) {
+        setLeaveSuccess('Leave request submitted successfully!');
+        setLeaveReason('');
+        setLeaveStart('');
+        setLeaveEnd('');
+        fetchLeaveHistory(token);
+        // Refresh profile to get updated balances
+        const profileRes = await fetch(`${API_URL}/api/auth/profile`, {
+          headers: { Authorization: `Bearer ${token}` }
+        });
+        const profileData = await profileRes.json();
+        if (profileData.success) {
+          setUser(profileData.user);
+        }
+      } else {
+        setLeaveError(data.message || 'Failed to submit leave request');
+      }
+    } catch (err) {
+      setLeaveError('Server connection error');
     }
   };
 
@@ -437,6 +506,48 @@ export default function App() {
 
     triggerPhoneCall(activeLead.phone);
 
+    // Initialize call state detector to auto-end call logs
+    const startCallDetection = async () => {
+      if (Platform.OS === 'android') {
+        try {
+          const hasReadPhoneState = await PermissionsAndroid.check(
+            PermissionsAndroid.PERMISSIONS.READ_PHONE_STATE
+          );
+          if (!hasReadPhoneState) {
+            await PermissionsAndroid.request(
+              PermissionsAndroid.PERMISSIONS.READ_PHONE_STATE,
+              {
+                title: 'Call Status Auto-Detection',
+                message: 'This app needs access to phone status to auto-detect when a call ends.',
+                buttonPositive: 'OK',
+                buttonNegative: 'Cancel'
+              }
+            );
+          }
+        } catch (err) {
+          console.log('Error requesting READ_PHONE_STATE:', err);
+        }
+      }
+
+      callDetectorRef.current = new CallDetectorManager(
+        (event, phoneNumber) => {
+          console.log('Call state event:', event);
+          if (event === 'Disconnected') {
+            console.log('Detected physical call end. Wrapping up...');
+            endCall();
+          }
+        },
+        false, // readPhoneNumber
+        () => {}, // iOS permission callback
+        {
+          title: 'Phone State Permission',
+          message: 'This app needs access to phone state to auto-end call logs.'
+        }
+      );
+    };
+
+    startCallDetection();
+
     // Notify backend
     if (socketRef.current) {
       socketRef.current.emit('call_state_change', {
@@ -484,6 +595,10 @@ export default function App() {
 
   const endCall = () => {
     clearInterval(timerIntervalRef.current);
+    if (callDetectorRef.current) {
+      callDetectorRef.current.dispose();
+      callDetectorRef.current = null;
+    }
     setScreen('disposition');
 
     if (socketRef.current) {
@@ -815,6 +930,271 @@ export default function App() {
 
           {/* SCREEN CONTENT */}
           {screen === 'dialer' && (
+            <View style={{
+              flexDirection: 'row',
+              backgroundColor: '#0f172a',
+              borderBottomWidth: 1,
+              borderBottomColor: '#1e293b',
+              paddingVertical: 4
+            }}>
+              <TouchableOpacity
+                onPress={() => setActiveTab('calling')}
+                style={{
+                  flex: 1,
+                  paddingVertical: 10,
+                  borderBottomWidth: activeTab === 'calling' ? 2 : 0,
+                  borderBottomColor: '#8b5cf6',
+                  alignItems: 'center'
+                }}
+              >
+                <Text style={{
+                  fontSize: 12,
+                  fontWeight: 'bold',
+                  color: activeTab === 'calling' ? '#ffffff' : '#94a3b8'
+                }}>Calling Dashboard</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                onPress={() => {
+                  setActiveTab('hrms');
+                  fetchLeaveHistory(token);
+                }}
+                style={{
+                  flex: 1,
+                  paddingVertical: 10,
+                  borderBottomWidth: activeTab === 'hrms' ? 2 : 0,
+                  borderBottomColor: '#8b5cf6',
+                  alignItems: 'center'
+                }}
+              >
+                <Text style={{
+                  fontSize: 12,
+                  fontWeight: 'bold',
+                  color: activeTab === 'hrms' ? '#ffffff' : '#94a3b8'
+                }}>HRMS Portal</Text>
+              </TouchableOpacity>
+            </View>
+          )}
+
+          {screen === 'dialer' && activeTab === 'hrms' && (
+            <ScrollView contentContainerStyle={styles.content}>
+              {/* Leave Balances Grid */}
+              <Text style={styles.sectionHeader}>My Leave Balances</Text>
+              <View style={{
+                flexDirection: 'row',
+                justifyContent: 'space-between',
+                marginBottom: 20
+              }}>
+                <View style={{
+                  flex: 1,
+                  backgroundColor: '#ffffff',
+                  borderWidth: 1,
+                  borderColor: '#e2e8f0',
+                  borderRadius: 16,
+                  padding: 12,
+                  marginHorizontal: 4,
+                  alignItems: 'center'
+                }}>
+                  <Text style={{ fontSize: 20, fontWeight: 'bold', color: '#f43f5e' }}>{user?.sickLeaveBalance !== undefined ? user.sickLeaveBalance : 12}</Text>
+                  <Text style={{ fontSize: 8, fontWeight: 'bold', color: '#94a3b8', textTransform: 'uppercase', marginTop: 2 }}>Sick Left</Text>
+                </View>
+                <View style={{
+                  flex: 1,
+                  backgroundColor: '#ffffff',
+                  borderWidth: 1,
+                  borderColor: '#e2e8f0',
+                  borderRadius: 16,
+                  padding: 12,
+                  marginHorizontal: 4,
+                  alignItems: 'center'
+                }}>
+                  <Text style={{ fontSize: 20, fontWeight: 'bold', color: '#d97706' }}>{user?.casualLeaveBalance !== undefined ? user.casualLeaveBalance : 12}</Text>
+                  <Text style={{ fontSize: 8, fontWeight: 'bold', color: '#94a3b8', textTransform: 'uppercase', marginTop: 2 }}>Casual Left</Text>
+                </View>
+                <View style={{
+                  flex: 1,
+                  backgroundColor: '#ffffff',
+                  borderWidth: 1,
+                  borderColor: '#e2e8f0',
+                  borderRadius: 16,
+                  padding: 12,
+                  marginHorizontal: 4,
+                  alignItems: 'center'
+                }}>
+                  <Text style={{ fontSize: 20, fontWeight: 'bold', color: '#2563eb' }}>{user?.earnedLeaveBalance !== undefined ? user.earnedLeaveBalance : 18}</Text>
+                  <Text style={{ fontSize: 8, fontWeight: 'bold', color: '#94a3b8', textTransform: 'uppercase', marginTop: 2 }}>Earned Left</Text>
+                </View>
+              </View>
+
+              {/* Documents Downloader */}
+              <Text style={styles.sectionHeader}>My HR Documents</Text>
+              <View style={{
+                backgroundColor: '#ffffff',
+                borderWidth: 1,
+                borderColor: '#e2e8f0',
+                borderRadius: 20,
+                padding: 16,
+                marginBottom: 20
+              }}>
+                <View style={{ flexDirection: 'row', gap: 10 }}>
+                  <TouchableOpacity
+                    onPress={() => user?.offerLetterUrl && Linking.openURL(user.offerLetterUrl).catch(e => console.log(e))}
+                    disabled={!user?.offerLetterUrl}
+                    style={{
+                      flex: 1,
+                      backgroundColor: user?.offerLetterUrl ? '#ecfdf5' : '#f8fafc',
+                      borderColor: user?.offerLetterUrl ? '#a7f3d0' : '#e2e8f0',
+                      borderWidth: 1,
+                      borderRadius: 12,
+                      padding: 12,
+                      alignItems: 'center',
+                      opacity: user?.offerLetterUrl ? 1 : 0.5
+                    }}
+                  >
+                    <Text style={{ fontSize: 9, fontWeight: 'bold', color: '#64748b', textTransform: 'uppercase' }}>Offer Letter</Text>
+                    <Text style={{ fontSize: 10, fontWeight: 'bold', color: user?.offerLetterUrl ? '#047857' : '#94a3b8', marginTop: 4 }}>
+                      {user?.offerLetterUrl ? 'Download PDF' : 'Not Uploaded'}
+                    </Text>
+                  </TouchableOpacity>
+
+                  <TouchableOpacity
+                    onPress={() => user?.relievingLetterUrl && Linking.openURL(user.relievingLetterUrl).catch(e => console.log(e))}
+                    disabled={!user?.relievingLetterUrl}
+                    style={{
+                      flex: 1,
+                      backgroundColor: user?.relievingLetterUrl ? '#f5f3ff' : '#f8fafc',
+                      borderColor: user?.relievingLetterUrl ? '#ddd6fe' : '#e2e8f0',
+                      borderWidth: 1,
+                      borderRadius: 12,
+                      padding: 12,
+                      alignItems: 'center',
+                      opacity: user?.relievingLetterUrl ? 1 : 0.5
+                    }}
+                  >
+                    <Text style={{ fontSize: 9, fontWeight: 'bold', color: '#64748b', textTransform: 'uppercase' }}>Relieving Ltr</Text>
+                    <Text style={{ fontSize: 10, fontWeight: 'bold', color: user?.relievingLetterUrl ? '#6d28d9' : '#94a3b8', marginTop: 4 }}>
+                      {user?.relievingLetterUrl ? 'Download PDF' : 'Not Uploaded'}
+                    </Text>
+                  </TouchableOpacity>
+                </View>
+              </View>
+
+              {/* Apply Leave Form */}
+              <Text style={styles.sectionHeader}>Apply for Leave</Text>
+              <View style={{
+                backgroundColor: '#ffffff',
+                borderWidth: 1,
+                borderColor: '#e2e8f0',
+                borderRadius: 20,
+                padding: 16,
+                marginBottom: 20
+              }}>
+                {leaveError ? <Text style={{ fontSize: 10, fontWeight: 'bold', color: '#ef4444', textAlign: 'center', marginBottom: 8 }}>{leaveError}</Text> : null}
+                {leaveSuccess ? <Text style={{ fontSize: 10, fontWeight: 'bold', color: '#10b981', textAlign: 'center', marginBottom: 8 }}>{leaveSuccess}</Text> : null}
+
+                <View style={{ marginBottom: 12 }}>
+                  <Text style={{ fontSize: 10, fontWeight: 'bold', color: '#64748b', marginBottom: 4 }}>LEAVE TYPE</Text>
+                  <View style={{
+                    backgroundColor: '#f8fafc',
+                    borderColor: '#cbd5e1',
+                    borderWidth: 1,
+                    borderRadius: 12,
+                    flexDirection: 'row'
+                  }}>
+                    {['sick', 'casual', 'earned'].map((t) => (
+                      <TouchableOpacity
+                        key={t}
+                        onPress={() => setLeaveType(t)}
+                        style={{
+                          flex: 1,
+                          paddingVertical: 8,
+                          alignItems: 'center',
+                          backgroundColor: leaveType === t ? '#8b5cf6' : 'transparent',
+                          borderRadius: 10
+                        }}
+                      >
+                        <Text style={{ fontSize: 10, fontWeight: 'bold', color: leaveType === t ? '#ffffff' : '#64748b' }}>{t.toUpperCase()}</Text>
+                      </TouchableOpacity>
+                    ))}
+                  </View>
+                </View>
+
+                <View style={{ flexDirection: 'row', gap: 10, marginBottom: 12 }}>
+                  <View style={{ flex: 1 }}>
+                    <Text style={{ fontSize: 10, fontWeight: 'bold', color: '#64748b', marginBottom: 4 }}>START DATE</Text>
+                    <TextInput
+                      value={leaveStart}
+                      onChangeText={setLeaveStart}
+                      placeholder="YYYY-MM-DD"
+                      placeholderTextColor="#94a3b8"
+                      style={{
+                        backgroundColor: '#f8fafc',
+                        borderColor: '#cbd5e1',
+                        borderWidth: 1,
+                        borderRadius: 12,
+                        paddingHorizontal: 12,
+                        paddingVertical: 8,
+                        fontSize: 12,
+                        color: '#1e293b'
+                      }}
+                    />
+                  </View>
+                  <View style={{ flex: 1 }}>
+                    <Text style={{ fontSize: 10, fontWeight: 'bold', color: '#64748b', marginBottom: 4 }}>END DATE</Text>
+                    <TextInput
+                      value={leaveEnd}
+                      onChangeText={setLeaveEnd}
+                      placeholder="YYYY-MM-DD"
+                      placeholderTextColor="#94a3b8"
+                      style={{
+                        backgroundColor: '#f8fafc',
+                        borderColor: '#cbd5e1',
+                        borderWidth: 1,
+                        borderRadius: 12,
+                        paddingHorizontal: 12,
+                        paddingVertical: 8,
+                        fontSize: 12,
+                        color: '#1e293b'
+                      }}
+                    />
+                  </View>
+                </View>
+
+                <View style={{ marginBottom: 16 }}>
+                  <Text style={{ fontSize: 10, fontWeight: 'bold', color: '#64748b', marginBottom: 4 }}>REASON</Text>
+                  <TextInput
+                    value={leaveReason}
+                    onChangeText={setLeaveReason}
+                    placeholder="e.g. Fever, Personal emergency"
+                    placeholderTextColor="#94a3b8"
+                    style={{
+                      backgroundColor: '#f8fafc',
+                      borderColor: '#cbd5e1',
+                      borderWidth: 1,
+                      borderRadius: 12,
+                      paddingHorizontal: 12,
+                      paddingVertical: 8,
+                      fontSize: 12,
+                      color: '#1e293b'
+                    }}
+                  />
+                </View>
+
+                <TouchableOpacity
+                  onPress={handleApplyLeave}
+                  style={{
+                    backgroundColor: '#8b5cf6',
+                    borderRadius: 12,
+                    paddingVertical: 12,
+                    alignItems: 'center'
+                  }}
+                >
+                  <Text style={{ fontSize: 12, fontWeight: 'bold', color: '#ffffff' }}>Submit Leave Request</Text>
+                </TouchableOpacity>
+              </View>
+            </ScrollView>
+          )}
+
+          {screen === 'dialer' && activeTab === 'calling' && (
             <ScrollView contentContainerStyle={styles.content}>
               {/* Attendance Card */}
               <View style={styles.targetCard}>
@@ -963,9 +1343,61 @@ export default function App() {
           {/* ACTIVE CALL SCREEN */}
           {screen === 'active_call' && (
             <View style={styles.callContent}>
+              <View style={{
+                flexDirection: 'row',
+                alignItems: 'center',
+                backgroundColor: '#ffe4e6',
+                borderColor: '#fecdd3',
+                borderWidth: 1,
+                borderRadius: 20,
+                paddingHorizontal: 12,
+                paddingVertical: 4,
+                marginBottom: 20,
+                alignSelf: 'center'
+              }}>
+                <View style={{
+                  width: 8,
+                  height: 8,
+                  borderRadius: 4,
+                  backgroundColor: '#e11d48',
+                  marginRight: 6
+                }} />
+                <Text style={{
+                  fontSize: 10,
+                  fontWeight: 'bold',
+                  color: '#e11d48'
+                }}>REC (Call Recording Active)</Text>
+              </View>
+
               <Text style={styles.callingHeader}>Active Call</Text>
               <Text style={styles.callingName}>{currentLead?.name}</Text>
               <Text style={styles.callingPhone}>{currentLead?.phone}</Text>
+
+              <View style={{
+                backgroundColor: '#fef3c7',
+                borderColor: '#fde68a',
+                borderWidth: 1,
+                borderRadius: 16,
+                padding: 12,
+                marginTop: 20,
+                marginBottom: 20,
+                alignSelf: 'stretch'
+              }}>
+                <Text style={{
+                  fontSize: 10,
+                  fontWeight: 'bold',
+                  color: '#d97706',
+                  textTransform: 'uppercase',
+                  letterSpacing: 0.5,
+                  marginBottom: 2
+                }}>📢 Compliance Script Announcement</Text>
+                <Text style={{
+                  fontSize: 12,
+                  fontWeight: '600',
+                  color: '#92400e',
+                  lineHeight: 16
+                }}>"Inform customer: This call is being recorded for quality and training purposes."</Text>
+              </View>
 
               <Text style={styles.callTimer}>{formatTime(callTimer)}</Text>
 

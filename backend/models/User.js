@@ -48,6 +48,26 @@ const User = sequelize.define('User', {
   resetOtpExpires: {
     type: DataTypes.DATE,
     allowNull: true
+  },
+  sickLeaveBalance: {
+    type: DataTypes.INTEGER,
+    defaultValue: 12
+  },
+  casualLeaveBalance: {
+    type: DataTypes.INTEGER,
+    defaultValue: 12
+  },
+  earnedLeaveBalance: {
+    type: DataTypes.INTEGER,
+    defaultValue: 18
+  },
+  offerLetterUrl: {
+    type: DataTypes.STRING,
+    allowNull: true
+  },
+  relievingLetterUrl: {
+    type: DataTypes.STRING,
+    allowNull: true
   }
 }, {
   hooks: {

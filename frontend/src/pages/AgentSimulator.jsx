@@ -30,9 +30,19 @@ const AgentSimulator = () => {
 
   // Phone screen states
   const [screen, setScreen] = useState('home'); // 'home' | 'dialing' | 'talking' | 'disposition'
+  const [activeTab, setActiveTab] = useState('calling'); // 'calling' | 'hrms'
   const [currentLead, setCurrentLead] = useState(null);
   const [targetCalls, setTargetCalls] = useState(150);
   const [completedToday, setCompletedToday] = useState(0);
+
+  // Leave Form inputs
+  const [leaveType, setLeaveType] = useState('sick');
+  const [leaveStart, setLeaveStart] = useState('');
+  const [leaveEnd, setLeaveEnd] = useState('');
+  const [leaveReason, setLeaveReason] = useState('');
+  const [leaveHistory, setLeaveHistory] = useState([]);
+  const [leaveError, setLeaveError] = useState('');
+  const [leaveSuccess, setLeaveSuccess] = useState('');
 
   // Extended Stats State
   const [stats, setStats] = useState({
@@ -129,6 +139,7 @@ const AgentSimulator = () => {
         fetchAgentNextLead(data.token);
         fetchAttendanceStatus(data.token);
         fetchOutcomesList(data.token);
+        fetchLeaveHistory(data.token);
       } else {
         setErrorMsg(data.message || 'Login failed. Check server status.');
       }
@@ -167,6 +178,61 @@ const AgentSimulator = () => {
       }
     } catch (e) {
       console.error('Error fetching attendance status:', e);
+    }
+  };
+
+  const fetchLeaveHistory = async (authToken) => {
+    try {
+      const response = await fetch('/api/hrms/leave', {
+        headers: { 'Authorization': `Bearer ${authToken || token}` }
+      });
+      const data = await response.json();
+      if (data.success) {
+        setLeaveHistory(data.leaves);
+      }
+    } catch (e) {
+      console.error('Error fetching leave history:', e);
+    }
+  };
+
+  const handleApplyLeave = async (e) => {
+    e.preventDefault();
+    setLeaveError('');
+    setLeaveSuccess('');
+    try {
+      const res = await fetch('/api/hrms/leave', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
+        body: JSON.stringify({
+          leaveType,
+          startDate: leaveStart,
+          endDate: leaveEnd,
+          reason: leaveReason
+        })
+      });
+      const data = await res.json();
+      if (data.success) {
+        setLeaveSuccess('Leave request submitted!');
+        setLeaveReason('');
+        setLeaveStart('');
+        setLeaveEnd('');
+        fetchLeaveHistory(token);
+        // Refresh agent user profile to get updated balances
+        const profileRes = await fetch('/api/auth/profile', {
+          headers: { 'Authorization': `Bearer ${token}` }
+        });
+        const profileData = await profileRes.json();
+        if (profileData.success) {
+          setAgentUser(profileData.user);
+        }
+      } else {
+        setLeaveError(data.message || 'Failed to submit leave');
+      }
+    } catch (err) {
+      setLeaveError('Server connection error');
     }
   };
 
@@ -655,9 +721,154 @@ const AgentSimulator = () => {
                   </div>
                 </header>
 
+                {/* Tab Navigation */}
+                <div className="flex bg-slate-900 border-b border-slate-800 shrink-0 text-[10px] font-bold uppercase tracking-wider text-center text-slate-400">
+                  <button 
+                    onClick={() => setActiveTab('calling')} 
+                    className={`flex-1 py-2 transition-all ${activeTab === 'calling' ? 'border-b-2 border-brand-500 text-white bg-slate-850' : 'hover:text-white'}`}
+                  >
+                    Calling
+                  </button>
+                  <button 
+                    onClick={() => {
+                      setActiveTab('hrms');
+                      fetchLeaveHistory(token);
+                    }} 
+                    className={`flex-1 py-2 transition-all ${activeTab === 'hrms' ? 'border-b-2 border-brand-500 text-white bg-slate-850' : 'hover:text-white'}`}
+                  >
+                    HRMS Portal
+                  </button>
+                </div>
+
                 {/* Display screens conditionally */}
                 <div className="flex-1 overflow-y-auto px-4 py-4 flex flex-col justify-between">
-                  {screen === 'home' && (
+                  {/* HRMS View */}
+                  {screen === 'home' && activeTab === 'hrms' && (
+                    <div className="flex-1 flex flex-col justify-between space-y-4">
+                      {/* Leave Balances Grid */}
+                      <div>
+                        <h4 className="text-[9px] font-bold text-slate-400 uppercase tracking-widest mb-1.5 text-left">My Leave Balances</h4>
+                        <div className="grid grid-cols-3 gap-2">
+                          <div className="p-3 bg-white border border-slate-200/80 rounded-2xl text-center">
+                            <p className="text-lg font-black text-rose-500">{agentUser.sickLeaveBalance !== undefined ? agentUser.sickLeaveBalance : 12}</p>
+                            <p className="text-[8px] font-bold text-slate-400 uppercase mt-0.5">Sick Left</p>
+                          </div>
+                          <div className="p-3 bg-white border border-slate-200/80 rounded-2xl text-center">
+                            <p className="text-lg font-black text-amber-500">{agentUser.casualLeaveBalance !== undefined ? agentUser.casualLeaveBalance : 12}</p>
+                            <p className="text-[8px] font-bold text-slate-400 uppercase mt-0.5">Casual Left</p>
+                          </div>
+                          <div className="p-3 bg-white border border-slate-200/80 rounded-2xl text-center">
+                            <p className="text-lg font-black text-blue-500">{agentUser.earnedLeaveBalance !== undefined ? agentUser.earnedLeaveBalance : 18}</p>
+                            <p className="text-[8px] font-bold text-slate-400 uppercase mt-0.5">Earned Left</p>
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* Documents Section */}
+                      <div className="p-4 bg-white border border-slate-200/80 rounded-2xl space-y-2.5 shadow-sm">
+                        <h4 className="text-[9px] font-bold text-slate-400 uppercase tracking-widest text-left">My Documents</h4>
+                        <div className="flex gap-2">
+                          <a
+                            href={agentUser.offerLetterUrl || '#'}
+                            target="_blank"
+                            rel="noreferrer"
+                            disabled={!agentUser.offerLetterUrl}
+                            onClick={(e) => !agentUser.offerLetterUrl && e.preventDefault()}
+                            className={`flex-1 flex flex-col items-center p-3 rounded-xl border text-center transition-all ${
+                              agentUser.offerLetterUrl
+                                ? 'bg-emerald-50/50 border-emerald-250 text-emerald-700 hover:bg-emerald-50'
+                                : 'bg-slate-50 border-slate-100 text-slate-400 opacity-60 cursor-not-allowed'
+                            }`}
+                          >
+                            <span className="text-[8px] font-bold uppercase tracking-wider">Offer Letter</span>
+                            <span className="text-[9px] font-black mt-1">Download</span>
+                          </a>
+                          <a
+                            href={agentUser.relievingLetterUrl || '#'}
+                            target="_blank"
+                            rel="noreferrer"
+                            disabled={!agentUser.relievingLetterUrl}
+                            onClick={(e) => !agentUser.relievingLetterUrl && e.preventDefault()}
+                            className={`flex-1 flex flex-col items-center p-3 rounded-xl border text-center transition-all ${
+                              agentUser.relievingLetterUrl
+                                ? 'bg-violet-50/50 border-violet-250 text-violet-700 hover:bg-violet-50'
+                                : 'bg-slate-50 border-slate-100 text-slate-400 opacity-60 cursor-not-allowed'
+                            }`}
+                          >
+                            <span className="text-[8px] font-bold uppercase tracking-wider">Relieving Letter</span>
+                            <span className="text-[9px] font-black mt-1">Download</span>
+                          </a>
+                        </div>
+                      </div>
+
+                      {/* Leave Application Form */}
+                      <div className="bg-white border border-slate-200/80 rounded-3xl p-4 shadow-sm space-y-3">
+                        <h4 className="text-[9px] font-bold text-slate-400 uppercase tracking-widest text-left">Apply for Leave</h4>
+                        
+                        {leaveError && <p className="text-[9px] font-bold text-rose-500 text-center">{leaveError}</p>}
+                        {leaveSuccess && <p className="text-[9px] font-bold text-emerald-600 text-center">{leaveSuccess}</p>}
+
+                        <form onSubmit={handleApplyLeave} className="space-y-2.5 text-left">
+                          <div>
+                            <label className="text-[8px] font-bold text-slate-400 uppercase block mb-0.5">Leave Type</label>
+                            <select
+                              value={leaveType}
+                              onChange={(e) => setLeaveType(e.target.value)}
+                              className="block w-full px-2 py-1.5 bg-slate-50 border border-slate-200 rounded-lg text-xs"
+                            >
+                              <option value="sick">Sick Leave</option>
+                              <option value="casual">Casual Leave</option>
+                              <option value="earned">Earned Leave</option>
+                            </select>
+                          </div>
+
+                          <div className="grid grid-cols-2 gap-2">
+                            <div>
+                              <label className="text-[8px] font-bold text-slate-400 uppercase block mb-0.5">Start Date</label>
+                              <input
+                                type="date"
+                                required
+                                value={leaveStart}
+                                onChange={(e) => setLeaveStart(e.target.value)}
+                                className="block w-full px-2 py-1 bg-slate-50 border border-slate-200 rounded-lg text-xs"
+                              />
+                            </div>
+                            <div>
+                              <label className="text-[8px] font-bold text-slate-400 uppercase block mb-0.5">End Date</label>
+                              <input
+                                type="date"
+                                required
+                                value={leaveEnd}
+                                onChange={(e) => setLeaveEnd(e.target.value)}
+                                className="block w-full px-2 py-1 bg-slate-50 border border-slate-200 rounded-lg text-xs"
+                              />
+                            </div>
+                          </div>
+
+                          <div>
+                            <label className="text-[8px] font-bold text-slate-400 uppercase block mb-0.5">Reason</label>
+                            <input
+                              type="text"
+                              required
+                              placeholder="e.g. Fever, Personal work"
+                              value={leaveReason}
+                              onChange={(e) => setLeaveReason(e.target.value)}
+                              className="block w-full px-2 py-1.5 bg-slate-50 border border-slate-200 rounded-lg text-xs font-semibold"
+                            />
+                          </div>
+
+                          <button
+                            type="submit"
+                            className="w-full py-2 rounded-xl bg-brand-600 hover:bg-brand-700 text-white text-xs font-bold transition-all shadow-sm"
+                          >
+                            Submit Leave Request
+                          </button>
+                        </form>
+                      </div>
+                    </div>
+                  )}
+
+                  {screen === 'home' && activeTab === 'calling' && (
                     /* 1. App home / Dial standby */
                     <div className="flex-1 flex flex-col justify-between">
                       <div className="space-y-4">
@@ -870,14 +1081,24 @@ const AgentSimulator = () => {
 
                   {screen === 'talking' && (
                     /* 3. Call active talking screen */
-                    <div className="flex-1 flex flex-col justify-between py-12 text-center">
+                    <div className="flex-1 flex flex-col justify-between py-6 text-center">
                       <div className="space-y-3">
+                        <div className="flex items-center justify-center gap-1.5 px-3 py-1 rounded-full bg-rose-50 border border-rose-100 text-[9px] font-bold text-rose-500 w-fit mx-auto animate-pulse">
+                          <span className="w-1.5 h-1.5 rounded-full bg-rose-600"></span>
+                          <span>⚫ REC (Call Recording Active)</span>
+                        </div>
                         <p className="text-xs font-bold text-emerald-600 uppercase tracking-widest flex items-center justify-center gap-1 animate-pulse">
                           <span className="w-1.5 h-1.5 rounded-full bg-emerald-500"></span>
                           <span>Active Call Connected</span>
                         </p>
                         <h3 className="text-2xl font-black text-slate-700 tracking-tight">{currentLead?.name}</h3>
                         <p className="text-sm font-mono font-bold text-slate-500">{currentLead?.phone}</p>
+                        
+                        {/* Compliance Warning Script */}
+                        <div className="p-3 bg-amber-50 border border-amber-150 rounded-2xl text-[10px] font-bold text-amber-800 leading-relaxed text-left space-y-0.5 mx-auto max-w-[280px]">
+                          <p className="text-amber-500 uppercase tracking-widest text-[8px]">📢 Compliance Script Announcement</p>
+                          <p>"Inform customer: This call is being recorded for quality and training purposes."</p>
+                        </div>
                       </div>
 
                       {/* Timer */}

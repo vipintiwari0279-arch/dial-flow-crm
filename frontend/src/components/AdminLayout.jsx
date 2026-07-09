@@ -14,7 +14,8 @@ import {
   Smartphone,
   PhoneCall,
   Activity,
-  Fingerprint
+  Fingerprint,
+  UserCheck
 } from 'lucide-react';
 
 const AdminLayout = ({ children }) => {
@@ -29,6 +30,7 @@ const AdminLayout = ({ children }) => {
     { name: 'Agents', path: '/admin/agents', icon: Users },
     { name: 'Distribute Leads', path: '/admin/distribute', icon: Radio },
     { name: 'Attendance Logs', path: '/admin/attendance', icon: Fingerprint },
+    { name: 'HRMS Portal', path: '/admin/hrms', icon: UserCheck },
     { name: 'Call Reports', path: '/admin/reports', icon: PhoneCall },
     { name: 'Live Monitoring', path: '/admin/live', icon: Activity },
     { name: 'Callback Leads', path: '/admin/callbacks', icon: Calendar },

@@ -41,6 +41,7 @@ const callRoutes = require('./routes/callRoutes');
 const analyticsRoutes = require('./routes/analyticsRoutes');
 const attendanceRoutes = require('./routes/attendanceRoutes');
 const dispositionRoutes = require('./routes/dispositionRoutes');
+const hrmsRoutes = require('./routes/hrmsRoutes');
 
 // Use Routes
 app.use('/api/auth', authRoutes);
@@ -50,6 +51,7 @@ app.use('/api/calls', callRoutes);
 app.use('/api/analytics', analyticsRoutes);
 app.use('/api/attendance', attendanceRoutes);
 app.use('/api/dispositions', dispositionRoutes);
+app.use('/api/hrms', hrmsRoutes);
 
 // Socket.io Connection Logic
 io.on('connection', (socket) => {

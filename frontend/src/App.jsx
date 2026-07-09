@@ -18,6 +18,7 @@ import DncList from './pages/DncList';
 import AgentSimulator from './pages/AgentSimulator';
 import AttendanceLogs from './pages/AttendanceLogs';
 import ManageDispositions from './pages/ManageDispositions';
+import HRMSPortal from './pages/HRMSPortal';
 
 const ProtectedRoute = ({ children, allowedRoles }) => {
   const { user, loading } = useAuth();
@@ -127,6 +128,13 @@ const AppContent = () => {
           <ProtectedRoute allowedRoles={['admin']}>
             <AdminLayout>
               <ManageDispositions />
+            </AdminLayout>
+          </ProtectedRoute>
+        } />
+        <Route path="/admin/hrms" element={
+          <ProtectedRoute allowedRoles={['admin']}>
+            <AdminLayout>
+              <HRMSPortal />
             </AdminLayout>
           </ProtectedRoute>
         } />

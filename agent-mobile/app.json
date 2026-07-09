@@ -13,7 +13,8 @@
       },
       "package": "com.vipin0279.dialflowagentapp",
       "permissions": [
-        "android.permission.CALL_PHONE"
+        "android.permission.CALL_PHONE",
+        "android.permission.READ_PHONE_STATE"
       ]
     },
     "extra": {

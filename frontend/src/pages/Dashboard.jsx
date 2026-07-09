@@ -196,6 +196,104 @@ const Dashboard = () => {
         })}
       </div>
 
+      <style>{`
+        @keyframes bounceSound {
+          0% { height: 10%; }
+          100% { height: 90%; }
+        }
+      `}</style>
+
+      {/* Calling Funnel & Real-Time Waveform Row */}
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+        
+        {/* Performance Funnel (2 Cols) */}
+        <div className="bg-white rounded-3xl border border-slate-200/80 shadow-premium p-6 md:col-span-2 space-y-4">
+          <div className="flex items-center justify-between">
+            <h3 className="font-extrabold text-slate-800 tracking-tight">Calling Performance Funnel</h3>
+            <span className="text-xs font-bold text-slate-400 uppercase tracking-widest text-right">Leads to Conversions</span>
+          </div>
+
+          <div className="space-y-3.5">
+            {/* Stage 1: Total Leads */}
+            <div>
+              <div className="flex justify-between text-xs font-bold text-slate-500 mb-1">
+                <span>Total Allocated Leads</span>
+                <span>{metrics.totalLeads} Leads (100%)</span>
+              </div>
+              <div className="w-full h-3 bg-slate-100 rounded-full overflow-hidden">
+                <div className="h-full bg-brand-500 rounded-full transition-all duration-1000" style={{ width: '100%' }}></div>
+              </div>
+            </div>
+
+            {/* Stage 2: Total Called */}
+            <div>
+              <div className="flex justify-between text-xs font-bold text-slate-500 mb-1">
+                <span>Called / Attempted</span>
+                <span>{metrics.totalCalled} Calls ({metrics.totalLeads > 0 ? Math.round((metrics.totalCalled / metrics.totalLeads) * 100) : 0}%)</span>
+              </div>
+              <div className="w-full h-3 bg-slate-100 rounded-full overflow-hidden">
+                <div className="h-full bg-emerald-500 rounded-full transition-all duration-1000" style={{ width: `${metrics.totalLeads > 0 ? (metrics.totalCalled / metrics.totalLeads) * 100 : 0}%` }}></div>
+              </div>
+            </div>
+
+            {/* Stage 3: Connected */}
+            <div>
+              <div className="flex justify-between text-xs font-bold text-slate-500 mb-1">
+                <span>Connected / Answered</span>
+                <span>{metrics.connected} Calls ({metrics.totalCalled > 0 ? Math.round((metrics.connected / metrics.totalCalled) * 100) : 0}% connection rate)</span>
+              </div>
+              <div className="w-full h-3 bg-slate-100 rounded-full overflow-hidden">
+                <div className="h-full bg-sky-500 rounded-full transition-all duration-1000" style={{ width: `${metrics.totalCalled > 0 ? (metrics.connected / metrics.totalCalled) * 100 : 0}%` }}></div>
+              </div>
+            </div>
+
+            {/* Stage 4: Callbacks / Follow-up */}
+            <div>
+              <div className="flex justify-between text-xs font-bold text-slate-500 mb-1">
+                <span>Callbacks & Follow-ups</span>
+                <span>{metrics.callback} Follow-up Leads</span>
+              </div>
+              <div className="w-full h-3 bg-slate-100 rounded-full overflow-hidden">
+                <div className="h-full bg-rose-500 rounded-full transition-all duration-1000" style={{ width: `${metrics.totalLeads > 0 ? (metrics.callback / metrics.totalLeads) * 100 : 0}%` }}></div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* Live Audio Waveform (1 Col) */}
+        <div className="bg-white rounded-3xl border border-slate-200/80 shadow-premium p-6 flex flex-col justify-between">
+          <div>
+            <div className="flex items-center gap-2 mb-4">
+              <span className="w-2.5 h-2.5 rounded-full bg-rose-500 animate-ping"></span>
+              <h3 className="font-extrabold text-slate-800 tracking-tight">Active Waveform Monitor</h3>
+            </div>
+            <p className="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-2">Live Voice Recording Status</p>
+          </div>
+
+          {/* Animated Sound Bars */}
+          <div className="flex items-end justify-center gap-1.5 h-20 my-2">
+            {[1.2, 2.1, 0.9, 1.8, 2.5, 1.5, 0.7, 2.3, 1.1, 1.6, 2.2, 0.8, 1.4, 2.0, 1.3].map((val, idx) => (
+              <div
+                key={idx}
+                className="w-1.5 bg-brand-500 rounded-t transition-all duration-200"
+                style={{
+                  height: `${val * 30}%`,
+                  animation: `bounceSound 0.6s ease-in-out infinite alternate`,
+                  animationDelay: `${idx * 0.05}s`
+                }}
+              ></div>
+            ))}
+          </div>
+
+          <div className="text-center">
+            <span className="text-[10px] font-bold text-slate-500 uppercase bg-slate-100 px-3 py-1 rounded-full">
+              {Object.values(liveCalls).some(c => c.state === 'talking') ? 'Recording Active Call...' : 'Monitoring Standby...'}
+            </span>
+          </div>
+        </div>
+
+      </div>
+
       {/* Live Monitoring Table Section */}
       <div className="bg-white rounded-3xl border border-slate-200/80 shadow-premium p-6">
         <div className="flex items-center justify-between mb-6">

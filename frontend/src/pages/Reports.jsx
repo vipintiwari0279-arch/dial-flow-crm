@@ -1,11 +1,40 @@
 import React, { useState, useEffect } from 'react';
 import { useAuth } from '../context/AuthContext';
-import { FileDown, RefreshCw, PhoneCall } from 'lucide-react';
+import { FileDown, RefreshCw, PhoneCall, Play, Pause, Volume2 } from 'lucide-react';
 
 const Reports = () => {
   const [calls, setCalls] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [playingCallId, setPlayingCallId] = useState(null);
+  const [playingProgress, setPlayingProgress] = useState(0);
   const { token } = useAuth();
+
+  useEffect(() => {
+    let interval;
+    if (playingCallId) {
+      interval = setInterval(() => {
+        setPlayingProgress(prev => {
+          if (prev >= 100) {
+            setPlayingCallId(null);
+            return 0;
+          }
+          return prev + 20;
+        });
+      }, 1000);
+    } else {
+      setPlayingProgress(0);
+    }
+    return () => clearInterval(interval);
+  }, [playingCallId]);
+
+  const handlePlayToggle = (callId) => {
+    if (playingCallId === callId) {
+      setPlayingCallId(null);
+    } else {
+      setPlayingCallId(callId);
+      setPlayingProgress(0);
+    }
+  };
 
   const fetchReports = async () => {
     setLoading(true);
@@ -95,6 +124,7 @@ const Reports = () => {
                   <th className="py-4 px-6">Lead</th>
                   <th className="py-4 px-6">Phone</th>
                   <th className="py-4 px-6 text-center">Duration</th>
+                  <th className="py-4 px-6 text-center">Recording</th>
                   <th className="py-4 px-6">Disposition</th>
                   <th className="py-4 px-6">Timestamp</th>
                   <th className="py-4 px-6">Notes</th>
@@ -108,6 +138,26 @@ const Reports = () => {
                     <td className="py-4 px-6 text-slate-600 font-mono text-xs font-medium">{call.lead?.phone || '-'}</td>
                     <td className="py-4 px-6 text-center font-semibold text-slate-500 font-mono text-xs">
                       {call.duration}s
+                    </td>
+                    <td className="py-4 px-6 text-center">
+                      <div className="inline-flex items-center gap-2 bg-slate-50 border border-slate-100 rounded-xl px-2.5 py-1.5 justify-center">
+                        <button
+                          onClick={() => handlePlayToggle(call.id)}
+                          className={`w-7 h-7 rounded-lg flex items-center justify-center transition-all ${
+                            playingCallId === call.id ? 'bg-rose-50 text-rose-600' : 'bg-brand-50 text-brand-600 hover:bg-brand-100'
+                          }`}
+                        >
+                          {playingCallId === call.id ? <Pause className="w-3.5 h-3.5" /> : <Play className="w-3.5 h-3.5" />}
+                        </button>
+                        {playingCallId === call.id ? (
+                          <div className="w-20 bg-slate-200 h-1.5 rounded-full overflow-hidden shrink-0">
+                            <div className="h-full bg-brand-500 rounded-full" style={{ width: `${playingProgress}%` }}></div>
+                          </div>
+                        ) : (
+                          <span className="text-[10px] text-slate-400 font-bold tracking-wide">0:24s</span>
+                        )}
+                        <Volume2 className="w-3.5 h-3.5 text-slate-400 shrink-0" />
+                      </div>
                     </td>
                     <td className="py-4 px-6">
                       <span className={`inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-extrabold uppercase tracking-wider ${

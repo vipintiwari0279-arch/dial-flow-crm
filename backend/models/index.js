@@ -6,8 +6,13 @@ const Dnc = require('./Dnc');
 const Target = require('./Target');
 const Attendance = require('./Attendance');
 const Outcome = require('./Outcome');
+const LeaveRequest = require('./LeaveRequest');
 
 // Relationships
+
+// User - LeaveRequest relationship
+User.hasMany(LeaveRequest, { foreignKey: 'userId', as: 'leaveRequests' });
+LeaveRequest.belongsTo(User, { foreignKey: 'userId', as: 'user' });
 
 // Agent - Lead relationship
 User.hasMany(Lead, { foreignKey: 'allocatedTo', as: 'allocatedLeads' });
@@ -41,5 +46,6 @@ module.exports = {
   Dnc,
   Target,
   Attendance,
-  Outcome
+  Outcome,
+  LeaveRequest
 };
