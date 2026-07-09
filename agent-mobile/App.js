@@ -91,9 +91,23 @@ export default function App() {
   const [showPassMobile, setShowPassMobile] = useState(false);
   const [showConfirmPassMobile, setShowConfirmPassMobile] = useState(false);
 
+  // Custom added states
+  const [showSplash, setShowSplash] = useState(true);
+  const [voipCallMode, setVoipCallMode] = useState(false);
+  const [isRecording, setIsRecording] = useState(false);
+  const [showSupportModal, setShowSupportModal] = useState(false);
+
   const socketRef = useRef(null);
   const timerIntervalRef = useRef(null);
   const countdownIntervalRef = useRef(null);
+
+  // Splash Screen timer (4 seconds)
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      setShowSplash(false);
+    }, 4000);
+    return () => clearTimeout(timer);
+  }, []);
 
   // AppState change listener fallback for auto-disconnect detection
   useEffect(() => {
@@ -496,6 +510,7 @@ export default function App() {
     if (!activeLead) return;
     setScreen('active_call');
     setCallTimer(0);
+    setIsRecording(false);
 
     // Make immediate phone call if permission is granted, otherwise open dialer as fallback
     const triggerPhoneCall = async (phoneNumber) => {
@@ -535,8 +550,6 @@ export default function App() {
       }
     };
 
-    triggerPhoneCall(activeLead.phone);
-
     // Initialize call state detector to auto-end call logs
     const startCallDetection = async () => {
       if (Platform.OS === 'android') {
@@ -555,14 +568,14 @@ export default function App() {
               }
             );
           }
-        } catch (err) {
-          console.log('Error requesting READ_PHONE_STATE:', err);
+        } catch (e) {
+          console.log('Error requesting phone state permission:', e);
         }
       }
 
       callDetectorRef.current = new CallDetectorManager(
         (event, phoneNumber) => {
-          console.log('Call state event:', event);
+          console.log('Native Call Event:', event, 'Number:', phoneNumber);
           if (event === 'Disconnected') {
             console.log('Detected physical call end. Wrapping up...');
             endCall();
@@ -577,7 +590,12 @@ export default function App() {
       );
     };
 
-    startCallDetection();
+    if (!voipCallMode) {
+      triggerPhoneCall(activeLead.phone);
+      startCallDetection();
+    } else {
+      console.log('VoIP In-App Calling Simulated - No native dialer redirect.');
+    }
 
     // Notify backend
     if (socketRef.current) {
@@ -665,7 +683,8 @@ export default function App() {
           notes,
           callbackTime: disposition === 'callback' ? callbackTime : null,
           leadName: currentLead.name,
-          phone: currentLead.phone
+          phone: currentLead.phone,
+          recordingUrl: isRecording ? 'https://www.soundhelix.com/examples/mp3/SoundHelix-Song-1.mp3' : null
         })
       });
       const data = await response.json();
@@ -674,9 +693,11 @@ export default function App() {
         setCompletedToday(prev => prev + 1);
         setNotes('');
         setCallbackTime('');
+        setIsRecording(false); // Reset recording state
 
-        // Trigger countdown
-        setCountdown(20);
+        // Trigger countdown (3s for Auto-Dialer, 10s for manual)
+        const count = autoDialEnabled ? 3 : 10;
+        setCountdown(count);
         setScreen('countdown');
         countdownIntervalRef.current = setInterval(() => {
           setCountdown(prev => {
@@ -720,6 +741,72 @@ export default function App() {
     const ss = (secs % 60).toString().padStart(2, '0');
     return `${mm}:${ss}`;
   };
+
+  const getLeaveDaysCount = (startStr, endStr) => {
+    try {
+      const s = new Date(startStr);
+      const e = new Date(endStr);
+      if (isNaN(s.getTime()) || isNaN(e.getTime())) return 1;
+      const diffTime = Math.abs(e - s);
+      return Math.ceil(diffTime / (1000 * 60 * 60 * 24)) + 1;
+    } catch {
+      return 1;
+    }
+  };
+
+  if (showSplash) {
+    return (
+      <SafeAreaView style={{ flex: 1, backgroundColor: '#0f172a', alignItems: 'center', justifyContent: 'center' }}>
+        <StatusBar style="light" />
+        <View style={{ alignItems: 'center', padding: 20 }}>
+          <View style={{
+            width: 80,
+            height: 80,
+            borderRadius: 24,
+            backgroundColor: '#8b5cf6',
+            alignItems: 'center',
+            justifyContent: 'center',
+            shadowColor: '#8b5cf6',
+            shadowOffset: { width: 0, height: 10 },
+            shadowOpacity: 0.3,
+            shadowRadius: 15,
+            marginBottom: 24
+          }}>
+            <Text style={{ fontSize: 36, color: '#ffffff' }}>📞</Text>
+          </View>
+          <Text style={{
+            fontSize: 34,
+            fontWeight: '900',
+            color: '#ffffff',
+            letterSpacing: 1,
+            textShadowColor: 'rgba(139, 92, 246, 0.4)',
+            textShadowOffset: { width: 0, height: 4 },
+            textShadowRadius: 12
+          }}>DIAL FLOW CRM</Text>
+          <Text style={{
+            fontSize: 16,
+            fontWeight: '600',
+            color: '#64748b',
+            marginTop: 12,
+            textTransform: 'uppercase',
+            letterSpacing: 2
+          }}>by</Text>
+          <Text style={{
+            fontSize: 30,
+            fontWeight: 'bold',
+            color: '#a78bfa',
+            marginTop: 12,
+            letterSpacing: 1.5,
+            textShadowColor: 'rgba(255, 255, 255, 0.2)',
+            textShadowOffset: { width: 0, height: 2 },
+            textShadowRadius: 8
+          }}>VIPIN TIWARI</Text>
+          
+          <ActivityIndicator size="large" color="#a78bfa" style={{ marginTop: 40 }} />
+        </View>
+      </SafeAreaView>
+    );
+  }
 
   return (
     <SafeAreaView style={styles.container}>
@@ -928,6 +1015,12 @@ export default function App() {
               <Text style={styles.agentName}>{user?.name}</Text>
             </View>
             <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+              <TouchableOpacity
+                style={[styles.statusBadge, { marginRight: 8, backgroundColor: '#3b82f6' }]}
+                onPress={() => setShowSupportModal(true)}
+              >
+                <Text style={styles.statusText}>⚙️ SUPPORT</Text>
+              </TouchableOpacity>
               <TouchableOpacity
                 style={[styles.statusBadge, { marginRight: 8, backgroundColor: '#f59e0b' }]}
                 onPress={fetchAndShowCallbacks}
@@ -1223,6 +1316,62 @@ export default function App() {
                   <Text style={{ fontSize: 12, fontWeight: 'bold', color: '#ffffff' }}>Submit Leave Request</Text>
                 </TouchableOpacity>
               </View>
+
+              {/* Leave History List */}
+              <Text style={styles.sectionHeader}>Leave History</Text>
+              <View style={{
+                backgroundColor: '#ffffff',
+                borderWidth: 1,
+                borderColor: '#e2e8f0',
+                borderRadius: 20,
+                padding: 16,
+                marginBottom: 30
+              }}>
+                {leaveHistory.length === 0 ? (
+                  <Text style={{ fontSize: 11, color: '#64748b', textAlign: 'center', paddingVertical: 10 }}>No leave applications found</Text>
+                ) : (
+                  leaveHistory.map((item, idx) => (
+                    <View 
+                      key={item.id || idx} 
+                      style={{
+                        paddingVertical: 10,
+                        borderBottomWidth: idx === leaveHistory.length - 1 ? 0 : 1,
+                        borderBottomColor: '#f1f5f9',
+                        flexDirection: 'row',
+                        justifyContent: 'space-between',
+                        alignItems: 'center'
+                      }}
+                    >
+                      <View style={{ flex: 1, paddingRight: 10 }}>
+                        <Text style={{ fontSize: 11, fontWeight: 'bold', color: '#1e293b', textTransform: 'capitalize' }}>
+                          {item.leaveType} Leave ({getLeaveDaysCount(item.startDate, item.endDate)} Days)
+                        </Text>
+                        <Text style={{ fontSize: 9, color: '#64748b', marginTop: 2 }}>
+                          {item.startDate} to {item.endDate}
+                        </Text>
+                        <Text style={{ fontSize: 9, fontStyle: 'italic', color: '#94a3b8', marginTop: 2 }}>
+                          Reason: {item.reason}
+                        </Text>
+                      </View>
+                      <View style={{
+                        paddingHorizontal: 8,
+                        paddingVertical: 4,
+                        borderRadius: 8,
+                        backgroundColor: item.status === 'approved' ? '#d1fae5' : item.status === 'rejected' ? '#fee2e2' : '#fef3c7'
+                      }}>
+                        <Text style={{
+                          fontSize: 9,
+                          fontWeight: 'bold',
+                          color: item.status === 'approved' ? '#065f46' : item.status === 'rejected' ? '#991b1b' : '#92400e',
+                          textTransform: 'uppercase'
+                        }}>
+                          {item.status}
+                        </Text>
+                      </View>
+                    </View>
+                  ))
+                )}
+              </View>
             </ScrollView>
           )}
 
@@ -1294,6 +1443,26 @@ export default function App() {
                   onPress={() => setAutoDialEnabled(!autoDialEnabled)}
                 >
                   <Text style={styles.punchBtnText}>{autoDialEnabled ? 'ACTIVE' : 'INACTIVE'}</Text>
+                </TouchableOpacity>
+              </View>
+
+              {/* In-App VoIP Dialer Toggle Switch */}
+              <View style={[styles.targetCard, { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }]}>
+                <View style={{ flex: 1, paddingRight: 8 }}>
+                  <Text style={styles.targetTitle}>In-App VoIP Mode (No Redirection)</Text>
+                  <Text style={styles.attendanceStatusText}>
+                    {voipCallMode ? 'VoIP Simulated Call inside App' : 'SIM Network Outbound Call'}
+                  </Text>
+                </View>
+                <TouchableOpacity
+                  style={[
+                    styles.punchBtn, 
+                    { marginTop: 0, paddingHorizontal: 16 }, 
+                    voipCallMode ? { backgroundColor: '#10b981' } : { backgroundColor: '#94a3b8' }
+                  ]}
+                  onPress={() => setVoipCallMode(!voipCallMode)}
+                >
+                  <Text style={styles.punchBtnText}>{voipCallMode ? 'VOIP' : 'SIM'}</Text>
                 </TouchableOpacity>
               </View>
 
@@ -1375,31 +1544,37 @@ export default function App() {
           {/* ACTIVE CALL SCREEN */}
           {screen === 'active_call' && (
             <View style={styles.callContent}>
-              <View style={{
-                flexDirection: 'row',
-                alignItems: 'center',
-                backgroundColor: '#ffe4e6',
-                borderColor: '#fecdd3',
-                borderWidth: 1,
-                borderRadius: 20,
-                paddingHorizontal: 12,
-                paddingVertical: 4,
-                marginBottom: 20,
-                alignSelf: 'center'
-              }}>
+              {/* Call Recording Toggle Action Button */}
+              <TouchableOpacity
+                onPress={() => setIsRecording(!isRecording)}
+                style={{
+                  flexDirection: 'row',
+                  alignItems: 'center',
+                  backgroundColor: isRecording ? '#ffe4e6' : '#f1f5f9',
+                  borderColor: isRecording ? '#fecdd3' : '#cbd5e1',
+                  borderWidth: 1,
+                  borderRadius: 20,
+                  paddingHorizontal: 16,
+                  paddingVertical: 8,
+                  marginBottom: 20,
+                  alignSelf: 'center'
+                }}
+              >
                 <View style={{
-                  width: 8,
-                  height: 8,
-                  borderRadius: 4,
-                  backgroundColor: '#e11d48',
-                  marginRight: 6
+                  width: 10,
+                  height: 10,
+                  borderRadius: 5,
+                  backgroundColor: isRecording ? '#e11d48' : '#94a3b8',
+                  marginRight: 8
                 }} />
                 <Text style={{
-                  fontSize: 10,
+                  fontSize: 11,
                   fontWeight: 'bold',
-                  color: '#e11d48'
-                }}>REC (Call Recording Active)</Text>
-              </View>
+                  color: isRecording ? '#e11d48' : '#64748b'
+                }}>
+                  {isRecording ? 'RECORDING ACTIVE (⚫ REC)' : 'TAP TO RECORD CALL'}
+                </Text>
+              </TouchableOpacity>
 
               <Text style={styles.callingHeader}>Active Call</Text>
               <Text style={styles.callingName}>{currentLead?.name}</Text>
@@ -1564,6 +1739,94 @@ export default function App() {
           </View>
         </Modal>
       )}
+
+      {/* SUPPORT MODAL */}
+      <Modal
+        visible={showSupportModal}
+        transparent={true}
+        animationType="fade"
+        onRequestClose={() => setShowSupportModal(false)}
+      >
+        <View style={{
+          flex: 1,
+          backgroundColor: 'rgba(15, 23, 42, 0.85)',
+          justifyContent: 'center',
+          alignItems: 'center',
+          padding: 20
+        }}>
+          <View style={{
+            backgroundColor: '#ffffff',
+            borderRadius: 24,
+            width: '100%',
+            maxWidth: 340,
+            padding: 24,
+            alignItems: 'center',
+            shadowColor: '#000000',
+            shadowOffset: { width: 0, height: 10 },
+            shadowOpacity: 0.25,
+            shadowRadius: 15,
+            elevation: 10
+          }}>
+            <Text style={{ fontSize: 22, fontWeight: 'bold', color: '#1e293b', marginBottom: 6 }}>Contact Support</Text>
+            <Text style={{ fontSize: 11, color: '#64748b', textAlign: 'center', marginBottom: 20 }}>
+              Dial Flow CRM Help & Technical Assistance
+            </Text>
+
+            <View style={{ width: '100%', gap: 12, marginBottom: 20 }}>
+              <TouchableOpacity 
+                onPress={() => Linking.openURL('tel:9702564894')}
+                style={{
+                  flexDirection: 'row',
+                  alignItems: 'center',
+                  backgroundColor: '#f8fafc',
+                  borderWidth: 1,
+                  borderColor: '#cbd5e1',
+                  borderRadius: 16,
+                  padding: 14
+                }}
+              >
+                <Text style={{ fontSize: 20, marginRight: 12 }}>📞</Text>
+                <View style={{ flex: 1 }}>
+                  <Text style={{ fontSize: 9, fontWeight: 'bold', color: '#64748b', textTransform: 'uppercase' }}>Phone Support</Text>
+                  <Text style={{ fontSize: 13, fontWeight: 'bold', color: '#1e293b', marginTop: 2 }}>9702564894</Text>
+                </View>
+              </TouchableOpacity>
+
+              <TouchableOpacity 
+                onPress={() => Linking.openURL('mailto:vipintiwari0279@gmail.com')}
+                style={{
+                  flexDirection: 'row',
+                  alignItems: 'center',
+                  backgroundColor: '#f8fafc',
+                  borderWidth: 1,
+                  borderColor: '#cbd5e1',
+                  borderRadius: 16,
+                  padding: 14
+                }}
+              >
+                <Text style={{ fontSize: 20, marginRight: 12 }}>✉️</Text>
+                <View style={{ flex: 1 }}>
+                  <Text style={{ fontSize: 9, fontWeight: 'bold', color: '#64748b', textTransform: 'uppercase' }}>Email Helpdesk</Text>
+                  <Text style={{ fontSize: 13, fontWeight: 'bold', color: '#1e293b', marginTop: 2 }}>vipintiwari0279@gmail.com</Text>
+                </View>
+              </TouchableOpacity>
+            </View>
+
+            <TouchableOpacity
+              onPress={() => setShowSupportModal(false)}
+              style={{
+                backgroundColor: '#8b5cf6',
+                borderRadius: 14,
+                paddingVertical: 12,
+                width: '100%',
+                alignItems: 'center'
+              }}
+            >
+              <Text style={{ fontSize: 12, fontWeight: 'bold', color: '#ffffff' }}>Close</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
     </SafeAreaView>
   );
 }

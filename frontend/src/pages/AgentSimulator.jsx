@@ -77,6 +77,19 @@ const AgentSimulator = () => {
   const countdownIntervalRef = useRef(null);
   const socketRef = useRef(null);
 
+  // Custom states added for welcome splash, support modal, call recording and VoIP calling
+  const [showSplash, setShowSplash] = useState(true);
+  const [voipCallMode, setVoipCallMode] = useState(false);
+  const [isRecording, setIsRecording] = useState(false);
+  const [showSupportModal, setShowSupportModal] = useState(false);
+
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      setShowSplash(false);
+    }, 4000);
+    return () => clearTimeout(timer);
+  }, []);
+
   // Load list of agents for dropdown
   const loadAgents = async () => {
     try {
@@ -397,6 +410,7 @@ const AgentSimulator = () => {
     if (!activeLead) return;
     setScreen('dialing');
     setCallTimer(0);
+    setIsRecording(false);
 
     // Notify sockets
     if (socketRef.current) {
@@ -522,7 +536,8 @@ const AgentSimulator = () => {
           notes,
           callbackTime: disposition === 'callback' ? callbackTime : null,
           leadName: currentLead.name,
-          phone: currentLead.phone
+          phone: currentLead.phone,
+          recordingUrl: isRecording ? 'https://www.soundhelix.com/examples/mp3/SoundHelix-Song-1.mp3' : null
         })
       });
 
@@ -531,9 +546,11 @@ const AgentSimulator = () => {
         setCompletedToday(prev => prev + 1);
         setNotes('');
         setCallbackTime('');
+        setIsRecording(false); // Reset recording state
 
-        // Trigger countdown clock for next lead
-        setCountdown(20);
+        // Trigger countdown clock for next lead (3s for auto-dial, 10s for manual)
+        const count = autoDialEnabled ? 3 : 10;
+        setCountdown(count);
         setScreen('countdown');
         countdownIntervalRef.current = setInterval(() => {
           setCountdown(prev => {
@@ -570,6 +587,45 @@ const AgentSimulator = () => {
   const circumference = normalizedRadius * 2 * Math.PI;
   const progressPercent = Math.min(Math.round((completedToday / targetCalls) * 100), 100) || 0;
   const strokeDashoffset = circumference - (progressPercent / 100) * circumference;
+
+  const getLeaveDaysCount = (startStr, endStr) => {
+    try {
+      const s = new Date(startStr);
+      const e = new Date(endStr);
+      if (isNaN(s.getTime()) || isNaN(e.getTime())) return 1;
+      const diffTime = Math.abs(e - s);
+      return Math.ceil(diffTime / (1000 * 60 * 60 * 24)) + 1;
+    } catch {
+      return 1;
+    }
+  };
+
+  if (showSplash) {
+    return (
+      <div className="min-h-screen bg-slate-950 flex flex-col items-center justify-center relative overflow-hidden">
+        {/* Background radial glowing effects */}
+        <div className="absolute top-0 -left-10 w-96 h-96 bg-brand-500 rounded-full filter blur-[150px] opacity-15"></div>
+        <div className="absolute bottom-0 -right-10 w-96 h-96 bg-indigo-500 rounded-full filter blur-[150px] opacity-15"></div>
+        
+        <div className="text-center z-10 space-y-6">
+          <div className="inline-flex w-20 h-20 rounded-3xl bg-gradient-to-tr from-brand-600 to-brand-400 items-center justify-center shadow-2xl shadow-brand-500/20 mb-4">
+            <PhoneCall className="w-10 h-10 text-white animate-pulse" />
+          </div>
+          <h1 className="text-5xl font-black bg-gradient-to-r from-white via-slate-100 to-slate-400 bg-clip-text text-transparent tracking-wider">
+            DIAL FLOW CRM
+          </h1>
+          <p className="text-lg text-slate-500 font-bold uppercase tracking-[0.25em]">by</p>
+          <h2 className="text-4xl font-extrabold text-brand-400 drop-shadow-[0_0_20px_rgba(139,92,246,0.3)] tracking-wide">
+            VIPIN TIWARI
+          </h2>
+          
+          <div className="pt-8">
+            <div className="w-10 h-10 border-4 border-slate-700 border-t-brand-500 rounded-full animate-spin mx-auto"></div>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-slate-950 p-8 flex flex-col items-center justify-center relative overflow-hidden">
@@ -709,6 +765,12 @@ const AgentSimulator = () => {
                   </div>
                   <div className="flex items-center gap-2">
                     <button
+                      onClick={() => setShowSupportModal(true)}
+                      className="px-2 py-0.5 text-[8px] font-bold bg-blue-500/20 text-blue-400 rounded-lg hover:bg-blue-500/35 transition-all"
+                    >
+                      SUPPORT
+                    </button>
+                    <button
                       onClick={fetchAndShowCallbacks}
                       className="px-2 py-0.5 text-[8px] font-bold bg-amber-500/20 text-amber-400 rounded-lg hover:bg-amber-500/35 transition-all"
                     >
@@ -730,9 +792,14 @@ const AgentSimulator = () => {
                     Calling
                   </button>
                   <button 
-                    onClick={() => {
+                    onClick={async () => {
                       setActiveTab('hrms');
                       fetchLeaveHistory(token);
+                      try {
+                        const res = await fetch('/api/auth/me', { headers: { Authorization: `Bearer ${token}` } });
+                        const data = await res.json();
+                        if (data.success) setAgentUser(data.user);
+                      } catch(err) {}
                     }} 
                     className={`flex-1 py-2 transition-all ${activeTab === 'hrms' ? 'border-b-2 border-brand-500 text-white bg-slate-850' : 'hover:text-white'}`}
                   >
@@ -865,6 +932,37 @@ const AgentSimulator = () => {
                           </button>
                         </form>
                       </div>
+
+                      {/* Leave History List */}
+                      <div className="bg-white border border-slate-200/80 rounded-3xl p-4 shadow-sm space-y-3">
+                        <h4 className="text-[9px] font-bold text-slate-400 uppercase tracking-widest text-left">Leave History</h4>
+                        {leaveHistory.length === 0 ? (
+                          <p className="text-[10px] text-slate-400 text-center py-2 font-semibold">No leave applications found</p>
+                        ) : (
+                          <div className="divide-y divide-slate-100 max-h-[160px] overflow-y-auto pr-1">
+                            {leaveHistory.map((item, idx) => (
+                              <div key={item.id || idx} className="py-2.5 flex justify-between items-center text-left">
+                                <div className="pr-2">
+                                  <p className="text-xs font-bold text-slate-700 capitalize">
+                                    {item.leaveType} Leave ({getLeaveDaysCount(item.startDate, item.endDate)} Days)
+                                  </p>
+                                  <p className="text-[9px] text-slate-400 mt-0.5 font-semibold">
+                                    {item.startDate} to {item.endDate}
+                                  </p>
+                                  <p className="text-[9px] text-slate-400 italic mt-0.5 font-medium">
+                                    Reason: {item.reason}
+                                  </p>
+                                </div>
+                                <span className={`px-2 py-0.5 rounded-lg text-[9px] font-bold uppercase shrink-0 ${
+                                  item.status === 'approved' ? 'bg-emerald-50 text-emerald-700' : item.status === 'rejected' ? 'bg-rose-50 text-rose-700' : 'bg-amber-50 text-amber-700'
+                                }`}>
+                                  {item.status}
+                                </span>
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                      </div>
                     </div>
                   )}
 
@@ -972,6 +1070,24 @@ const AgentSimulator = () => {
                             }`}
                           >
                             {autoDialEnabled ? 'ACTIVE' : 'INACTIVE'}
+                          </button>
+                        </div>
+
+                        {/* In-App VoIP Dialer Toggle Switch */}
+                        <div className="bg-white rounded-3xl border border-slate-200/80 p-4 shadow-sm flex items-center justify-between">
+                          <div>
+                            <p className="text-[10px] font-bold text-slate-700">In-App VoIP Mode (No Redirect)</p>
+                            <p className="text-[9px] font-semibold text-slate-400">
+                              {voipCallMode ? 'VoIP Simulated Call Active' : 'SIM Network Outbound Call'}
+                            </p>
+                          </div>
+                          <button
+                            onClick={() => setVoipCallMode(!voipCallMode)}
+                            className={`px-3 py-1 rounded-xl text-[10px] font-extrabold text-white transition-all ${
+                              voipCallMode ? 'bg-emerald-600' : 'bg-slate-400'
+                            }`}
+                          >
+                            {voipCallMode ? 'VOIP' : 'SIM'}
                           </button>
                         </div>
 
@@ -1083,10 +1199,18 @@ const AgentSimulator = () => {
                     /* 3. Call active talking screen */
                     <div className="flex-1 flex flex-col justify-between py-6 text-center">
                       <div className="space-y-3">
-                        <div className="flex items-center justify-center gap-1.5 px-3 py-1 rounded-full bg-rose-50 border border-rose-100 text-[9px] font-bold text-rose-500 w-fit mx-auto animate-pulse">
-                          <span className="w-1.5 h-1.5 rounded-full bg-rose-600"></span>
-                          <span>⚫ REC (Call Recording Active)</span>
-                        </div>
+                        <button
+                          type="button"
+                          onClick={() => setIsRecording(!isRecording)}
+                          className={`flex items-center justify-center gap-1.5 px-3 py-1.5 rounded-full border text-[9px] font-bold w-fit mx-auto transition-all ${
+                            isRecording 
+                              ? 'bg-rose-50 border-rose-100 text-rose-500 animate-pulse' 
+                              : 'bg-slate-50 border-slate-200 text-slate-500'
+                          }`}
+                        >
+                          <span className={`w-1.5 h-1.5 rounded-full ${isRecording ? 'bg-rose-600' : 'bg-slate-400'}`}></span>
+                          <span>{isRecording ? 'RECORDING ACTIVE (⚫ REC)' : 'TAP TO RECORD CALL'}</span>
+                        </button>
                         <p className="text-xs font-bold text-emerald-600 uppercase tracking-widest flex items-center justify-center gap-1 animate-pulse">
                           <span className="w-1.5 h-1.5 rounded-full bg-emerald-500"></span>
                           <span>Active Call Connected</span>
@@ -1283,6 +1407,58 @@ const AgentSimulator = () => {
                             ))
                           )}
                         </div>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Support Modal Slide-up Overlay */}
+                  {showSupportModal && (
+                    <div className="absolute inset-0 bg-slate-950/70 flex flex-col justify-end z-50 animate-fade-in pt-6">
+                      <div className="bg-white rounded-t-[24px] h-[75%] flex flex-col overflow-hidden border-t border-slate-200 p-6 space-y-4">
+                        <div className="flex items-center justify-between">
+                          <h4 className="font-extrabold text-sm text-slate-800">Support & Helpdesk</h4>
+                          <button 
+                            type="button"
+                            onClick={() => setShowSupportModal(false)}
+                            className="text-[10px] font-bold text-rose-500 hover:text-rose-600 bg-rose-50 px-2.5 py-1.5 rounded-lg"
+                          >
+                            Close
+                          </button>
+                        </div>
+                        
+                        <div className="space-y-3 text-left">
+                          <p className="text-[10px] text-slate-400 font-semibold uppercase tracking-wider">Contact Details</p>
+                          
+                          <a 
+                            href="tel:9702564894"
+                            className="flex items-center gap-3 p-3 bg-slate-50 border border-slate-100 rounded-xl hover:bg-slate-100 transition-all block"
+                          >
+                            <span className="text-xl">📞</span>
+                            <div>
+                              <p className="text-[8px] font-bold text-slate-400 uppercase">Phone Support</p>
+                              <p className="text-xs font-black text-slate-700">9702564894</p>
+                            </div>
+                          </a>
+
+                          <a 
+                            href="mailto:vipintiwari0279@gmail.com"
+                            className="flex items-center gap-3 p-3 bg-slate-50 border border-slate-100 rounded-xl hover:bg-slate-100 transition-all block"
+                          >
+                            <span className="text-xl">✉️</span>
+                            <div>
+                              <p className="text-[8px] font-bold text-slate-400 uppercase">Email Helpdesk</p>
+                              <p className="text-xs font-black text-slate-700">vipintiwari0279@gmail.com</p>
+                            </div>
+                          </a>
+                        </div>
+                        
+                        <button
+                          type="button"
+                          onClick={() => setShowSupportModal(false)}
+                          className="w-full py-3 bg-brand-600 text-white rounded-xl text-xs font-bold hover:bg-brand-700 transition-all"
+                        >
+                          Dismiss
+                        </button>
                       </div>
                     </div>
                   )}

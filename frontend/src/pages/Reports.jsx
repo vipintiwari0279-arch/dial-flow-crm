@@ -140,24 +140,28 @@ const Reports = () => {
                       {call.duration}s
                     </td>
                     <td className="py-4 px-6 text-center">
-                      <div className="inline-flex items-center gap-2 bg-slate-50 border border-slate-100 rounded-xl px-2.5 py-1.5 justify-center">
-                        <button
-                          onClick={() => handlePlayToggle(call.id)}
-                          className={`w-7 h-7 rounded-lg flex items-center justify-center transition-all ${
-                            playingCallId === call.id ? 'bg-rose-50 text-rose-600' : 'bg-brand-50 text-brand-600 hover:bg-brand-100'
-                          }`}
-                        >
-                          {playingCallId === call.id ? <Pause className="w-3.5 h-3.5" /> : <Play className="w-3.5 h-3.5" />}
-                        </button>
-                        {playingCallId === call.id ? (
-                          <div className="w-20 bg-slate-200 h-1.5 rounded-full overflow-hidden shrink-0">
-                            <div className="h-full bg-brand-500 rounded-full" style={{ width: `${playingProgress}%` }}></div>
-                          </div>
-                        ) : (
-                          <span className="text-[10px] text-slate-400 font-bold tracking-wide">0:24s</span>
-                        )}
-                        <Volume2 className="w-3.5 h-3.5 text-slate-400 shrink-0" />
-                      </div>
+                      {call.recordingUrl ? (
+                        <div className="inline-flex items-center gap-2 bg-slate-50 border border-slate-100 rounded-xl px-2.5 py-1.5 justify-center">
+                          <button
+                            onClick={() => handlePlayToggle(call.id)}
+                            className={`w-7 h-7 rounded-lg flex items-center justify-center transition-all ${
+                              playingCallId === call.id ? 'bg-rose-50 text-rose-600' : 'bg-brand-50 text-brand-600 hover:bg-brand-100'
+                            }`}
+                          >
+                            {playingCallId === call.id ? <Pause className="w-3.5 h-3.5" /> : <Play className="w-3.5 h-3.5" />}
+                          </button>
+                          {playingCallId === call.id ? (
+                            <div className="w-20 bg-slate-200 h-1.5 rounded-full overflow-hidden shrink-0">
+                              <div className="h-full bg-brand-500 rounded-full" style={{ width: `${playingProgress}%` }}></div>
+                            </div>
+                          ) : (
+                            <span className="text-[10px] text-slate-400 font-bold tracking-wide">0:24s</span>
+                          )}
+                          <Volume2 className="w-3.5 h-3.5 text-slate-400 shrink-0" />
+                        </div>
+                      ) : (
+                        <span className="text-xs text-slate-400 italic">No Recording</span>
+                      )}
                     </td>
                     <td className="py-4 px-6">
                       <span className={`inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-extrabold uppercase tracking-wider ${

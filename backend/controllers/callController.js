@@ -4,7 +4,7 @@ const { Call, Lead, Dnc, User } = require('../models');
 // @route   POST /api/calls/log
 // @access  Private (Agent Only)
 exports.logCall = async (req, res) => {
-  const { leadId, duration, disposition, notes, callbackTime, leadName, phone } = req.body;
+  const { leadId, duration, disposition, notes, callbackTime, leadName, phone, recordingUrl } = req.body;
   const agentId = req.user.id;
 
   try {
@@ -44,7 +44,8 @@ exports.logCall = async (req, res) => {
       agentId,
       duration: duration || 0,
       disposition,
-      notes
+      notes,
+      recordingUrl: recordingUrl || null
     });
 
     // 2. Update Lead values
