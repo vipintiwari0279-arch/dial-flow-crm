@@ -31,9 +31,9 @@ exports.applyLeave = async (req, res) => {
 
     const user = await User.findByPk(req.user.id);
     let balance = 0;
-    if (leaveType === 'sick') balance = user.sickLeaveBalance;
-    if (leaveType === 'casual') balance = user.casualLeaveBalance;
-    if (leaveType === 'earned') balance = user.earnedLeaveBalance;
+    if (leaveType === 'sick') balance = user.sickLeaveBalance !== null && user.sickLeaveBalance !== undefined ? user.sickLeaveBalance : 12;
+    if (leaveType === 'casual') balance = user.casualLeaveBalance !== null && user.casualLeaveBalance !== undefined ? user.casualLeaveBalance : 12;
+    if (leaveType === 'earned') balance = user.earnedLeaveBalance !== null && user.earnedLeaveBalance !== undefined ? user.earnedLeaveBalance : 18;
 
     if (balance < days) {
       return res.status(400).json({ 
@@ -119,11 +119,14 @@ exports.updateLeaveStatus = async (req, res) => {
       
       // Deduct leaves
       if (leave.leaveType === 'sick') {
-        user.sickLeaveBalance = Math.max(0, user.sickLeaveBalance - days);
+        const currentBal = user.sickLeaveBalance !== null && user.sickLeaveBalance !== undefined ? user.sickLeaveBalance : 12;
+        user.sickLeaveBalance = Math.max(0, currentBal - days);
       } else if (leave.leaveType === 'casual') {
-        user.casualLeaveBalance = Math.max(0, user.casualLeaveBalance - days);
+        const currentBal = user.casualLeaveBalance !== null && user.casualLeaveBalance !== undefined ? user.casualLeaveBalance : 12;
+        user.casualLeaveBalance = Math.max(0, currentBal - days);
       } else if (leave.leaveType === 'earned') {
-        user.earnedLeaveBalance = Math.max(0, user.earnedLeaveBalance - days);
+        const currentBal = user.earnedLeaveBalance !== null && user.earnedLeaveBalance !== undefined ? user.earnedLeaveBalance : 18;
+        user.earnedLeaveBalance = Math.max(0, currentBal - days);
       }
       
       await user.save();
