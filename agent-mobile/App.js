@@ -114,7 +114,7 @@ export default function App() {
     const handleAppStateChange = (nextAppState) => {
       if (nextAppState === 'active') {
         setScreen(currentScreen => {
-          if (currentScreen === 'active_call') {
+          if (currentScreen === 'active_call' && !voipCallMode) {
             console.log('App returned to active foreground from call. Redirecting to disposition outcome...');
             setTimeout(() => {
               endCall();
@@ -129,7 +129,7 @@ export default function App() {
     return () => {
       subscription.remove();
     };
-  }, []);
+  }, [voipCallMode]);
 
   // Force login redirect if user session becomes null in authenticated screens
   useEffect(() => {
@@ -1585,6 +1585,17 @@ export default function App() {
               </TouchableOpacity>
 
               <Text style={styles.callingHeader}>Active Call</Text>
+              <Text style={{
+                fontSize: 11,
+                fontWeight: 'bold',
+                color: callTimer > 0 ? '#10b981' : '#f59e0b',
+                textAlign: 'center',
+                marginBottom: 10,
+                textTransform: 'uppercase',
+                letterSpacing: 0.5
+              }}>
+                {callTimer > 0 ? '🟢 Connected (VoIP Live)' : '🔔 Ringing / Connecting...'}
+              </Text>
               <Text style={styles.callingName}>{currentLead?.name}</Text>
               <Text style={styles.callingPhone}>{currentLead?.phone}</Text>
 

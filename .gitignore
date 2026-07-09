@@ -1,0 +1,12 @@
+node_modules/
+.expo/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+.env
+dist/
+build/
+.system_generated/
+*.log
+agent-mobile/node_modules/
+agent-mobile/.expo/
