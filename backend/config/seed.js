@@ -11,19 +11,20 @@ const seedDatabase = async () => {
         email: 'admin@dialflow.com',
         password: 'adminpassword',
         role: 'admin',
-        status: 'online'
+        status: 'online',
+        phone: '9999999999'
       });
-      console.log('Seed: Admin user created (admin@dialflow.com / adminpassword)');
+      console.log('Seed: Admin user created (admin@dialflow.com / adminpassword / phone 9999999999)');
     } else {
       adminUser = await User.findOne({ where: { role: 'admin' } });
     }
 
     const agentsData = [
-      { name: 'Vipin Kumar', email: 'vipin@dialflow.com', password: 'password123', status: 'online' },
-      { name: 'Amit Sharma', email: 'amit@dialflow.com', password: 'password123', status: 'online' },
-      { name: 'Pooja Singh', email: 'pooja@dialflow.com', password: 'password123', status: 'online' },
-      { name: 'Rohit Verma', email: 'rohit@dialflow.com', password: 'password123', status: 'offline' },
-      { name: 'Neha Patel', email: 'neha@dialflow.com', password: 'password123', status: 'online' }
+      { name: 'Vipin Kumar', email: 'vipin@dialflow.com', password: 'password123', status: 'online', phone: '8888888888' },
+      { name: 'Amit Sharma', email: 'amit@dialflow.com', password: 'password123', status: 'online', phone: '7777777777' },
+      { name: 'Pooja Singh', email: 'pooja@dialflow.com', password: 'password123', status: 'online', phone: '6666666666' },
+      { name: 'Rohit Verma', email: 'rohit@dialflow.com', password: 'password123', status: 'offline', phone: '5555555555' },
+      { name: 'Neha Patel', email: 'neha@dialflow.com', password: 'password123', status: 'online', phone: '4444444444' }
     ];
 
     const agents = [];
@@ -35,9 +36,10 @@ const seedDatabase = async () => {
           email: agent.email,
           password: agent.password,
           role: 'agent',
-          status: agent.status
+          status: agent.status,
+          phone: agent.phone
         });
-        console.log(`Seed: Agent created (${agent.email} / password123)`);
+        console.log(`Seed: Agent created (${agent.email} / password123 / phone ${agent.phone})`);
       }
       agents.push(user);
     }

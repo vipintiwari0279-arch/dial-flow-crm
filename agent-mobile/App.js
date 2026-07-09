@@ -12,13 +12,11 @@ import {
   Dimensions,
   Platform,
   Linking,
-  Modal,
-  PermissionsAndroid
+  Modal
 } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
 import { io } from 'socket.io-client';
 import * as Location from 'expo-location';
-import RNImmediatePhoneCall from 'react-native-immediate-phone-call';
 
 const API_URL = 'https://dial-flow-crm.onrender.com'; // Deployed live Render backend URL
 
@@ -67,9 +65,107 @@ export default function App() {
   const [callbackTime, setCallbackTime] = useState('');
   const [showStatusMenu, setShowStatusMenu] = useState(false);
 
+  // Forgot password flow states
+  const [loginMode, setLoginMode] = useState('login'); // 'login' | 'forgot' | 'verify' | 'reset'
+  const [forgotLoginId, setForgotLoginId] = useState('');
+  const [forgotOtp, setForgotOtp] = useState('');
+  const [forgotNewPassword, setForgotNewPassword] = useState('');
+  const [forgotConfirmPassword, setForgotConfirmPassword] = useState('');
+  const [showPassMobile, setShowPassMobile] = useState(false);
+  const [showConfirmPassMobile, setShowConfirmPassMobile] = useState(false);
+
   const socketRef = useRef(null);
   const timerIntervalRef = useRef(null);
   const countdownIntervalRef = useRef(null);
+
+  const handleMobileForgotPassword = async () => {
+    if (!forgotLoginId.trim()) {
+      Alert.alert('Error', 'Please enter email or phone number.');
+      return;
+    }
+    setLoading(true);
+    try {
+      const response = await fetch(`${API_URL}/api/auth/forgot-password`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ loginId: forgotLoginId })
+      });
+      const data = await response.json();
+      if (data.success) {
+        Alert.alert('Verification OTP Sent', data.message);
+        if (data.testOtp) {
+          Alert.alert('TEST MODE OTP', `Your OTP code is: ${data.testOtp}`);
+        }
+        setLoginMode('verify');
+      } else {
+        Alert.alert('Error', data.message || 'Request failed.');
+      }
+    } catch (e) {
+      Alert.alert('Error', 'Connection failed.');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleMobileVerifyOtp = async () => {
+    if (!forgotOtp.trim()) {
+      Alert.alert('Error', 'Please enter OTP.');
+      return;
+    }
+    setLoading(true);
+    try {
+      const response = await fetch(`${API_URL}/api/auth/verify-otp`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ loginId: forgotLoginId, otp: forgotOtp })
+      });
+      const data = await response.json();
+      if (data.success) {
+        setLoginMode('reset');
+      } else {
+        Alert.alert('Error', data.message || 'Invalid or expired OTP.');
+      }
+    } catch (e) {
+      Alert.alert('Error', 'Verification failed.');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleMobileResetPassword = async () => {
+    if (!forgotNewPassword || !forgotConfirmPassword) {
+      Alert.alert('Error', 'Please fill all password fields.');
+      return;
+    }
+    if (forgotNewPassword !== forgotConfirmPassword) {
+      Alert.alert('Error', 'Passwords do not match.');
+      return;
+    }
+    setLoading(true);
+    try {
+      const response = await fetch(`${API_URL}/api/auth/reset-password`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ loginId: forgotLoginId, otp: forgotOtp, newPassword: forgotNewPassword })
+      });
+      const data = await response.json();
+      if (data.success) {
+        Alert.alert('Success', 'Password reset successfully! Please login.');
+        setLoginMode('login');
+        setPassword('');
+        setEmail(forgotLoginId);
+        setForgotNewPassword('');
+        setForgotConfirmPassword('');
+        setForgotOtp('');
+      } else {
+        Alert.alert('Error', data.message || 'Failed to reset password.');
+      }
+    } catch (e) {
+      Alert.alert('Error', 'Reset request failed.');
+    } finally {
+      setLoading(false);
+    }
+  };
 
   // Setup sockets on login
   const connectSocket = (agentId, agentName) => {
@@ -299,45 +395,10 @@ export default function App() {
     setScreen('active_call');
     setCallTimer(0);
 
-    // Make immediate phone call if permission is granted, otherwise open dialer as fallback
-    const triggerPhoneCall = async (phoneNumber) => {
-      if (Platform.OS === 'android') {
-        try {
-          const hasPermission = await PermissionsAndroid.check(
-            PermissionsAndroid.PERMISSIONS.CALL_PHONE
-          );
-          if (hasPermission) {
-            RNImmediatePhoneCall.immediatePhoneCall(phoneNumber);
-            return;
-          }
-
-          const status = await PermissionsAndroid.request(
-            PermissionsAndroid.PERMISSIONS.CALL_PHONE,
-            {
-              title: 'Direct Calling Permission',
-              message: 'This app needs calling permission to dial phone numbers instantly.',
-              buttonPositive: 'OK',
-              buttonNegative: 'Cancel'
-            }
-          );
-
-          if (status === PermissionsAndroid.RESULTS.GRANTED) {
-            RNImmediatePhoneCall.immediatePhoneCall(phoneNumber);
-          } else {
-            Linking.openURL(`tel:${phoneNumber}`).catch(err => console.log(err));
-          }
-        } catch (err) {
-          console.log('Immediate dial error, falling back:', err);
-          Linking.openURL(`tel:${phoneNumber}`).catch(err => console.log(err));
-        }
-      } else {
-        Linking.openURL(`tel:${phoneNumber}`).catch(err => {
-          console.log('Error opening native dialer:', err);
-        });
-      }
-    };
-
-    triggerPhoneCall(activeLead.phone);
+    // Open physical SIM card dialer automatically to make a real phone call!
+    Linking.openURL(`tel:${activeLead.phone}`).catch(err => {
+      console.log('Error opening native dialer:', err);
+    });
 
     // Notify backend
     if (socketRef.current) {
@@ -485,35 +546,192 @@ export default function App() {
       {screen === 'login' && (
         <View style={styles.loginContainer}>
           <Text style={styles.brandTitle}>Dial Flow CRM</Text>
-          <Text style={styles.brandSubtitle}>By Vipin - Agent App</Text>
+          <Text style={styles.brandSubtitle}>
+            {loginMode === 'login' && 'By Vipin - Agent App'}
+            {loginMode === 'forgot' && 'Account Password Recovery'}
+            {loginMode === 'verify' && 'Enter Verification OTP'}
+            {loginMode === 'reset' && 'Create New Password'}
+          </Text>
 
-          <View style={styles.inputContainer}>
-            <TextInput
-              style={styles.input}
-              placeholder="Email Address"
-              placeholderTextColor="#94a3b8"
-              value={email}
-              onChangeText={setEmail}
-              autoCapitalize="none"
-              keyboardType="email-address"
-            />
-            <TextInput
-              style={styles.input}
-              placeholder="Password"
-              placeholderTextColor="#94a3b8"
-              value={password}
-              onChangeText={setPassword}
-              secureTextEntry
-            />
-          </View>
+          {/* 1. LOGIN MODE */}
+          {loginMode === 'login' && (
+            <View>
+              <View style={styles.inputContainer}>
+                <TextInput
+                  style={styles.input}
+                  placeholder="Email or Phone Number"
+                  placeholderTextColor="#94a3b8"
+                  value={email}
+                  onChangeText={setEmail}
+                  autoCapitalize="none"
+                />
+                <View style={{ position: 'relative' }}>
+                  <TextInput
+                    style={styles.input}
+                    placeholder="Password"
+                    placeholderTextColor="#94a3b8"
+                    value={password}
+                    onChangeText={setPassword}
+                    secureTextEntry={!showPassMobile}
+                  />
+                  <TouchableOpacity
+                    style={{
+                      position: 'absolute',
+                      right: 16,
+                      top: 17,
+                      padding: 4
+                    }}
+                    onPress={() => setShowPassMobile(!showPassMobile)}
+                  >
+                    <Text style={{ color: '#a78bfa', fontSize: 13, fontWeight: 'bold' }}>
+                      {showPassMobile ? 'HIDE' : 'SHOW'}
+                    </Text>
+                  </TouchableOpacity>
+                </View>
+              </View>
 
-          <TouchableOpacity style={styles.loginBtn} onPress={handleLogin} disabled={loading}>
-            {loading ? (
-              <ActivityIndicator color="#fff" />
-            ) : (
-              <Text style={styles.loginBtnText}>Sign In</Text>
-            )}
-          </TouchableOpacity>
+              <TouchableOpacity 
+                onPress={() => { setLoginMode('forgot'); setForgotLoginId(email); }}
+                style={{ alignSelf: 'flex-end', marginTop: 12 }}
+              >
+                <Text style={{ color: '#a78bfa', fontSize: 13, fontWeight: 'bold' }}>Forgot Password?</Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity style={styles.loginBtn} onPress={handleLogin} disabled={loading}>
+                {loading ? (
+                  <ActivityIndicator color="#fff" />
+                ) : (
+                  <Text style={styles.loginBtnText}>Sign In</Text>
+                )}
+              </TouchableOpacity>
+            </View>
+          )}
+
+          {/* 2. FORGOT PASSWORD MODE */}
+          {loginMode === 'forgot' && (
+            <View>
+              <View style={styles.inputContainer}>
+                <TextInput
+                  style={styles.input}
+                  placeholder="Enter Registered Email or Phone"
+                  placeholderTextColor="#94a3b8"
+                  value={forgotLoginId}
+                  onChangeText={setForgotLoginId}
+                  autoCapitalize="none"
+                />
+              </View>
+
+              <TouchableOpacity style={styles.loginBtn} onPress={handleMobileForgotPassword} disabled={loading}>
+                {loading ? (
+                  <ActivityIndicator color="#fff" />
+                ) : (
+                  <Text style={styles.loginBtnText}>Send 6-Digit OTP</Text>
+                )}
+              </TouchableOpacity>
+
+              <TouchableOpacity 
+                onPress={() => setLoginMode('login')}
+                style={{ alignSelf: 'center', marginTop: 20 }}
+              >
+                <Text style={{ color: '#94a3b8', fontSize: 13, fontWeight: 'bold' }}>Back to Login</Text>
+              </TouchableOpacity>
+            </View>
+          )}
+
+          {/* 3. VERIFY OTP MODE */}
+          {loginMode === 'verify' && (
+            <View>
+              <View style={styles.inputContainer}>
+                <TextInput
+                  style={[styles.input, { letterSpacing: 6, fontSize: 18, textAlign: 'center', fontWeight: 'bold' }]}
+                  placeholder="000000"
+                  placeholderTextColor="#64748b"
+                  value={forgotOtp}
+                  onChangeText={(val) => setForgotOtp(val.replace(/[^0-9]/g, ''))}
+                  keyboardType="numeric"
+                  maxLength={6}
+                />
+              </View>
+
+              <TouchableOpacity style={styles.loginBtn} onPress={handleMobileVerifyOtp} disabled={loading}>
+                {loading ? (
+                  <ActivityIndicator color="#fff" />
+                ) : (
+                  <Text style={styles.loginBtnText}>Verify OTP Code</Text>
+                )}
+              </TouchableOpacity>
+
+              <TouchableOpacity 
+                onPress={() => setLoginMode('forgot')}
+                style={{ alignSelf: 'center', marginTop: 20 }}
+              >
+                <Text style={{ color: '#a78bfa', fontSize: 13, fontWeight: 'bold' }}>Resend Code / Back</Text>
+              </TouchableOpacity>
+            </View>
+          )}
+
+          {/* 4. RESET PASSWORD MODE */}
+          {loginMode === 'reset' && (
+            <View>
+              <View style={styles.inputContainer}>
+                <View style={{ position: 'relative' }}>
+                  <TextInput
+                    style={styles.input}
+                    placeholder="New Password"
+                    placeholderTextColor="#94a3b8"
+                    value={forgotNewPassword}
+                    onChangeText={setForgotNewPassword}
+                    secureTextEntry={!showPassMobile}
+                  />
+                  <TouchableOpacity
+                    style={{
+                      position: 'absolute',
+                      right: 16,
+                      top: 17,
+                      padding: 4
+                    }}
+                    onPress={() => setShowPassMobile(!showPassMobile)}
+                  >
+                    <Text style={{ color: '#a78bfa', fontSize: 13, fontWeight: 'bold' }}>
+                      {showPassMobile ? 'HIDE' : 'SHOW'}
+                    </Text>
+                  </TouchableOpacity>
+                </View>
+
+                <View style={{ position: 'relative' }}>
+                  <TextInput
+                    style={styles.input}
+                    placeholder="Confirm New Password"
+                    placeholderTextColor="#94a3b8"
+                    value={forgotConfirmPassword}
+                    onChangeText={setForgotConfirmPassword}
+                    secureTextEntry={!showConfirmPassMobile}
+                  />
+                  <TouchableOpacity
+                    style={{
+                      position: 'absolute',
+                      right: 16,
+                      top: 17,
+                      padding: 4
+                    }}
+                    onPress={() => setShowConfirmPassMobile(!showConfirmPassMobile)}
+                  >
+                    <Text style={{ color: '#a78bfa', fontSize: 13, fontWeight: 'bold' }}>
+                      {showConfirmPassMobile ? 'HIDE' : 'SHOW'}
+                    </Text>
+                  </TouchableOpacity>
+                </View>
+              </View>
+
+              <TouchableOpacity style={styles.loginBtn} onPress={handleMobileResetPassword} disabled={loading}>
+                {loading ? (
+                  <ActivityIndicator color="#fff" />
+                ) : (
+                  <Text style={styles.loginBtnText}>Reset Password</Text>
+                )}
+              </TouchableOpacity>
+            </View>
+          )}
         </View>
       )}
 

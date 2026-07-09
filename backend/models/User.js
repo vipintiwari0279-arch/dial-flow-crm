@@ -35,6 +35,19 @@ const User = sequelize.define('User', {
   currentLeadId: {
     type: DataTypes.UUID,
     allowNull: true
+  },
+  phone: {
+    type: DataTypes.STRING,
+    allowNull: true,
+    unique: true
+  },
+  resetOtp: {
+    type: DataTypes.STRING,
+    allowNull: true
+  },
+  resetOtpExpires: {
+    type: DataTypes.DATE,
+    allowNull: true
   }
 }, {
   hooks: {

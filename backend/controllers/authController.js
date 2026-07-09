@@ -1,5 +1,6 @@
 const { User } = require('../models');
 const jwt = require('jsonwebtoken');
+const { Op } = require('sequelize');
 
 const generateToken = (id) => {
   return jwt.sign({ id }, process.env.JWT_SECRET || 'super_secret_dial_flow_crm_key_12345', {
@@ -15,10 +16,18 @@ exports.login = async (req, res) => {
 
   try {
     if (!email || !password) {
-      return res.status(400).json({ success: false, message: 'Please provide email and password' });
+      return res.status(400).json({ success: false, message: 'Please provide email/phone and password' });
     }
 
-    const user = await User.findOne({ where: { email } });
+    const loginId = String(email).trim();
+    const user = await User.findOne({
+      where: {
+        [Op.or]: [
+          { email: loginId },
+          { phone: loginId }
+        ]
+      }
+    });
 
     if (!user || !(await user.comparePassword(password))) {
       return res.status(401).json({ success: false, message: 'Invalid credentials' });
@@ -144,5 +153,132 @@ exports.debugDb = async (req, res) => {
     });
   } catch (err) {
     res.status(500).json({ success: false, error: err.message });
+  }
+};
+
+const nodemailer = require('nodemailer');
+
+// @desc    Request forgot password OTP
+// @route   POST /api/auth/forgot-password
+// @access  Public
+exports.forgotPassword = async (req, res) => {
+  const { loginId } = req.body; // Can be email or phone number
+
+  try {
+    if (!loginId) {
+      return res.status(400).json({ success: false, message: 'Please provide email or phone number' });
+    }
+
+    const cleanLoginId = String(loginId).trim();
+
+    const user = await User.findOne({
+      where: {
+        [Op.or]: [
+          { email: cleanLoginId },
+          { phone: cleanLoginId }
+        ]
+      }
+    });
+
+    if (!user) {
+      return res.status(404).json({ success: false, message: 'No user registered with this email or phone number' });
+    }
+
+    // Generate 6-digit OTP
+    const otp = Math.floor(100000 + Math.random() * 900000).toString();
+    
+    // Save to user (valid for 10 minutes)
+    user.resetOtp = otp;
+    user.resetOtpExpires = new Date(Date.now() + 10 * 60 * 1000);
+    await user.save();
+
+    console.log(`Generated Password Reset OTP for ${user.email} (${user.phone}): ${otp}`);
+
+    res.status(200).json({
+      success: true,
+      message: 'Verification OTP sent successfully.',
+      testOtp: otp 
+    });
+  } catch (error) {
+    console.error('Forgot password error:', error);
+    res.status(500).json({ success: false, message: 'Server error' });
+  }
+};
+
+// @desc    Verify OTP code
+// @route   POST /api/auth/verify-otp
+// @access  Public
+exports.verifyOtp = async (req, res) => {
+  const { loginId, otp } = req.body;
+
+  try {
+    if (!loginId || !otp) {
+      return res.status(400).json({ success: false, message: 'Please provide email/phone and OTP code' });
+    }
+
+    const user = await User.findOne({
+      where: {
+        [Op.or]: [
+          { email: loginId },
+          { phone: loginId }
+        ],
+        resetOtp: otp,
+        resetOtpExpires: { [Op.gt]: new Date() }
+      }
+    });
+
+    if (!user) {
+      return res.status(400).json({ success: false, message: 'Invalid or expired OTP code' });
+    }
+
+    res.status(200).json({
+      success: true,
+      message: 'OTP verified successfully.'
+    });
+  } catch (error) {
+    console.error('Verify OTP error:', error);
+    res.status(500).json({ success: false, message: 'Server error' });
+  }
+};
+
+// @desc    Reset password using OTP
+// @route   POST /api/auth/reset-password
+// @access  Public
+exports.resetPassword = async (req, res) => {
+  const { loginId, otp, newPassword } = req.body;
+
+  try {
+    if (!loginId || !otp || !newPassword) {
+      return res.status(400).json({ success: false, message: 'Please provide email/phone, OTP, and new password' });
+    }
+
+    const user = await User.findOne({
+      where: {
+        [Op.or]: [
+          { email: loginId },
+          { phone: loginId }
+        ],
+        resetOtp: otp,
+        resetOtpExpires: { [Op.gt]: new Date() }
+      }
+    });
+
+    if (!user) {
+      return res.status(400).json({ success: false, message: 'Invalid or expired OTP code' });
+    }
+
+    // Set new password (will automatically hash on save)
+    user.password = newPassword;
+    user.resetOtp = null;
+    user.resetOtpExpires = null;
+    await user.save();
+
+    res.status(200).json({
+      success: true,
+      message: 'Password reset successfully. You can now login with your new credentials.'
+    });
+  } catch (error) {
+    console.error('Reset password error:', error);
+    res.status(500).json({ success: false, message: 'Server error' });
   }
 };

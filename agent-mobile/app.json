@@ -11,10 +11,7 @@
         "foregroundImage": "./assets/adaptive-icon.png",
         "backgroundColor": "#0f172a"
       },
-      "package": "com.vipin0279.dialflowagentapp",
-      "permissions": [
-        "android.permission.CALL_PHONE"
-      ]
+      "package": "com.vipin0279.dialflowagentapp"
     },
     "extra": {
       "eas": {
