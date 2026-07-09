@@ -3,7 +3,7 @@ const router = express.Router();
 const multer = require('multer');
 const path = require('path');
 const fs = require('fs');
-const { uploadLeads, distributeLeads, getLeads, getNextAgentLead, getCallbacks } = require('../controllers/leadController');
+const { uploadLeads, distributeLeads, getLeads, getNextAgentLead, getCallbacks, wipeCleanLeads } = require('../controllers/leadController');
 const { protect, authorize } = require('../middleware/auth');
 
 // Ensure uploads folder exists
@@ -37,6 +37,7 @@ router.use(protect);
 
 router.post('/upload', authorize('admin'), upload.single('file'), uploadLeads);
 router.post('/distribute', authorize('admin'), distributeLeads);
+router.post('/wipe-clean', authorize('admin'), wipeCleanLeads);
 router.get('/', authorize('admin'), getLeads);
 router.get('/next', getNextAgentLead);
 router.get('/callbacks', getCallbacks);

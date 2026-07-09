@@ -348,3 +348,27 @@ exports.getCallbacks = async (req, res) => {
     res.status(500).json({ success: false, message: 'Server error' });
   }
 };
+
+// @desc    Wipe all leads and call logs (Clear Testing Data)
+// @route   POST /api/leads/wipe-clean
+// @access  Private (Admin Only)
+exports.wipeCleanLeads = async (req, res) => {
+  try {
+    // 1. Delete all Call Logs
+    await Call.destroy({ where: {} });
+
+    // 2. Delete all Leads
+    await Lead.destroy({ where: {} });
+
+    // 3. Reset active leads for all agents
+    await User.update({ currentLeadId: null }, { where: {} });
+
+    res.status(200).json({
+      success: true,
+      message: 'All testing leads and call logs have been successfully wiped clean.'
+    });
+  } catch (error) {
+    console.error('Wipe clean error:', error);
+    res.status(500).json({ success: false, message: 'Server error' });
+  }
+};

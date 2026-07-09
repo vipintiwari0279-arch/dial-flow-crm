@@ -7,6 +7,8 @@ const UploadLeads = () => {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [result, setResult] = useState(null);
+  const [wipeLoading, setWipeLoading] = useState(false);
+  const [wipeSuccess, setWipeSuccess] = useState('');
   const { token } = useAuth();
 
   const handleFileChange = (e) => {
@@ -67,6 +69,37 @@ const UploadLeads = () => {
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
+  };
+
+  const handleWipeData = async () => {
+    if (!window.confirm("WARNING: Are you absolutely sure you want to delete all lead records, lead allocations, and call history logs? This testing data reset cannot be undone.")) {
+      return;
+    }
+
+    setWipeLoading(true);
+    setError('');
+    setWipeSuccess('');
+    setResult(null);
+
+    try {
+      const response = await fetch('/api/leads/wipe-clean', {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${token}`
+        }
+      });
+      const data = await response.json();
+
+      if (data.success) {
+        setWipeSuccess(data.message || 'All leads and call logs wiped successfully.');
+      } else {
+         setError(data.message || 'Failed to wipe data.');
+      }
+    } catch (err) {
+      setError('Connection failed. Server might be offline.');
+    } finally {
+      setWipeLoading(false);
+    }
   };
 
   return (
@@ -167,7 +200,36 @@ const UploadLeads = () => {
             </div>
           </div>
         </div>
-      )}
+      {/* Wipe/Reset testing data card */}
+      <div className="bg-rose-50/50 border border-rose-100/80 rounded-3xl p-8 space-y-4 shadow-sm">
+        <div className="flex items-start gap-4">
+          <div className="w-10 h-10 rounded-xl bg-rose-100 flex items-center justify-center text-rose-600 shrink-0">
+            <ShieldAlert className="w-5 h-5" />
+          </div>
+          <div>
+            <h3 className="text-sm font-extrabold text-slate-800">Wipe Testing Data & Reset Leads</h3>
+            <p className="text-xs text-slate-500 font-medium mt-0.5">Delete all uploaded leads, assignments, and call history logs to start fresh for live operations.</p>
+          </div>
+        </div>
+
+        {wipeSuccess && (
+          <div className="p-4 rounded-xl bg-emerald-50 border border-emerald-100 text-xs font-bold text-emerald-600 animate-fade-in">
+            {wipeSuccess}
+          </div>
+        )}
+
+        <button
+          onClick={handleWipeData}
+          disabled={wipeLoading}
+          className="w-full py-3.5 px-4 rounded-xl text-sm font-bold text-white bg-rose-600 hover:bg-rose-700 shadow-lg shadow-rose-500/10 transition-all disabled:opacity-40 disabled:cursor-not-allowed hover-scale"
+        >
+          {wipeLoading ? (
+            <span className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin inline-block"></span>
+          ) : (
+            <span>Wipe Database & Reset Leads</span>
+          )}
+        </button>
+      </div>
     </div>
   );
 };
