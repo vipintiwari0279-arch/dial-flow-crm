@@ -13,7 +13,8 @@ import {
   Platform,
   Linking,
   Modal,
-  PermissionsAndroid
+  PermissionsAndroid,
+  AppState
 } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
 import { io } from 'socket.io-client';
@@ -93,6 +94,28 @@ export default function App() {
   const socketRef = useRef(null);
   const timerIntervalRef = useRef(null);
   const countdownIntervalRef = useRef(null);
+
+  // AppState change listener fallback for auto-disconnect detection
+  useEffect(() => {
+    const handleAppStateChange = (nextAppState) => {
+      if (nextAppState === 'active') {
+        setScreen(currentScreen => {
+          if (currentScreen === 'active_call') {
+            console.log('App returned to active foreground from call. Redirecting to disposition outcome...');
+            setTimeout(() => {
+              endCall();
+            }, 500);
+          }
+          return currentScreen;
+        });
+      }
+    };
+
+    const subscription = AppState.addEventListener('change', handleAppStateChange);
+    return () => {
+      subscription.remove();
+    };
+  }, []);
 
   const handleMobileForgotPassword = async () => {
     if (!forgotLoginId.trim()) {
