@@ -522,7 +522,12 @@ export default function App() {
 
     // Make immediate phone call if permission is granted, otherwise open dialer as fallback
     const triggerPhoneCall = async (phoneNumber) => {
-      if (Platform.OS === 'android') {
+      // Check if we are running in standalone APK build with direct dialer support
+      const isImmediateSupported = Platform.OS === 'android' && 
+                                   RNImmediatePhoneCall && 
+                                   typeof RNImmediatePhoneCall.immediatePhoneCall === 'function';
+
+      if (isImmediateSupported) {
         try {
           const hasPermission = await PermissionsAndroid.check(
             PermissionsAndroid.PERMISSIONS.CALL_PHONE
@@ -544,18 +549,17 @@ export default function App() {
 
           if (status === PermissionsAndroid.RESULTS.GRANTED) {
             RNImmediatePhoneCall.immediatePhoneCall(phoneNumber);
-          } else {
-            Linking.openURL(`tel:${phoneNumber}`).catch(err => console.log(err));
+            return;
           }
         } catch (err) {
-          console.log('Immediate dial error, falling back:', err);
-          Linking.openURL(`tel:${phoneNumber}`).catch(err => console.log(err));
+          console.log('Immediate dial error, falling back to Linking:', err);
         }
-      } else {
-        Linking.openURL(`tel:${phoneNumber}`).catch(err => {
-          console.log('Error opening native dialer:', err);
-        });
       }
+
+      // Default Expo Go or iOS fallback - Launches default native dialer
+      Linking.openURL(`tel:${phoneNumber}`).catch(err => {
+        console.log('Error opening native dialer URL:', err);
+      });
     };
 
     // Initialize call state detector to auto-end call logs
