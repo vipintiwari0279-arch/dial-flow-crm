@@ -131,6 +131,14 @@ export default function App() {
     };
   }, []);
 
+  // Force login redirect if user session becomes null in authenticated screens
+  useEffect(() => {
+    if (!user && screen !== 'login' && !showSplash) {
+      console.log('No user session found, resetting screen to login.');
+      setScreen('login');
+    }
+  }, [user, screen, showSplash]);
+
   const handleMobileForgotPassword = async () => {
     if (!forgotLoginId.trim()) {
       Alert.alert('Error', 'Please enter email or phone number.');
@@ -598,7 +606,7 @@ export default function App() {
     }
 
     // Notify backend
-    if (socketRef.current) {
+    if (socketRef.current && user) {
       socketRef.current.emit('call_state_change', {
         agentId: user.id,
         agentName: user.name,
@@ -610,7 +618,7 @@ export default function App() {
 
     // Connect call after dummy ringing delay
     setTimeout(() => {
-      if (socketRef.current) {
+      if (socketRef.current && user) {
         socketRef.current.emit('call_state_change', {
           agentId: user.id,
           agentName: user.name,
@@ -650,7 +658,7 @@ export default function App() {
     }
     setScreen('disposition');
 
-    if (socketRef.current) {
+    if (socketRef.current && user) {
       socketRef.current.emit('call_state_change', {
         agentId: user.id,
         agentName: user.name,
