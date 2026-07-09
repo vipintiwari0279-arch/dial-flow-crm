@@ -299,6 +299,20 @@ export default function App() {
     }
   };
 
+  const fetchUserProfile = async (authToken) => {
+    try {
+      const profileRes = await fetch(`${API_URL}/api/auth/me`, {
+        headers: { Authorization: `Bearer ${authToken || token}` }
+      });
+      const profileData = await profileRes.json();
+      if (profileData.success) {
+        setUser(profileData.user);
+      }
+    } catch (e) {
+      console.log('Error refreshing user profile:', e);
+    }
+  };
+
   const handleApplyLeave = async () => {
     setLeaveError('');
     setLeaveSuccess('');
@@ -324,13 +338,7 @@ export default function App() {
         setLeaveEnd('');
         fetchLeaveHistory(token);
         // Refresh profile to get updated balances
-        const profileRes = await fetch(`${API_URL}/api/auth/me`, {
-          headers: { Authorization: `Bearer ${token}` }
-        });
-        const profileData = await profileRes.json();
-        if (profileData.success) {
-          setUser(profileData.user);
-        }
+        fetchUserProfile(token);
       } else {
         setLeaveError(data.message || 'Failed to submit leave request');
       }
@@ -980,6 +988,7 @@ export default function App() {
                 onPress={() => {
                   setActiveTab('hrms');
                   fetchLeaveHistory(token);
+                  fetchUserProfile(token);
                 }}
                 style={{
                   flex: 1,
