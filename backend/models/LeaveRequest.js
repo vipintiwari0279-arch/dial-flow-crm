@@ -12,8 +12,11 @@ const LeaveRequest = sequelize.define('LeaveRequest', {
     allowNull: false
   },
   leaveType: {
-    type: DataTypes.ENUM('sick', 'casual', 'earned'),
-    allowNull: false
+    type: DataTypes.STRING,
+    allowNull: false,
+    validate: {
+      isIn: [['sick', 'casual', 'earned']]
+    }
   },
   startDate: {
     type: DataTypes.DATEONLY,
@@ -28,8 +31,11 @@ const LeaveRequest = sequelize.define('LeaveRequest', {
     allowNull: false
   },
   status: {
-    type: DataTypes.ENUM('pending', 'approved', 'rejected'),
-    defaultValue: 'pending'
+    type: DataTypes.STRING,
+    defaultValue: 'pending',
+    validate: {
+      isIn: [['pending', 'approved', 'rejected']]
+    }
   },
   approvedBy: {
     type: DataTypes.UUID,
