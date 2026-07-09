@@ -12,11 +12,13 @@ import {
   Dimensions,
   Platform,
   Linking,
-  Modal
+  Modal,
+  PermissionsAndroid
 } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
 import { io } from 'socket.io-client';
 import * as Location from 'expo-location';
+import RNImmediatePhoneCall from 'react-native-immediate-phone-call';
 
 const API_URL = 'https://dial-flow-crm.onrender.com'; // Deployed live Render backend URL
 
@@ -297,10 +299,45 @@ export default function App() {
     setScreen('active_call');
     setCallTimer(0);
 
-    // Open physical SIM card dialer automatically to make a real phone call!
-    Linking.openURL(`tel:${activeLead.phone}`).catch(err => {
-      console.log('Error opening native dialer:', err);
-    });
+    // Make immediate phone call if permission is granted, otherwise open dialer as fallback
+    const triggerPhoneCall = async (phoneNumber) => {
+      if (Platform.OS === 'android') {
+        try {
+          const hasPermission = await PermissionsAndroid.check(
+            PermissionsAndroid.PERMISSIONS.CALL_PHONE
+          );
+          if (hasPermission) {
+            RNImmediatePhoneCall.immediatePhoneCall(phoneNumber);
+            return;
+          }
+
+          const status = await PermissionsAndroid.request(
+            PermissionsAndroid.PERMISSIONS.CALL_PHONE,
+            {
+              title: 'Direct Calling Permission',
+              message: 'This app needs calling permission to dial phone numbers instantly.',
+              buttonPositive: 'OK',
+              buttonNegative: 'Cancel'
+            }
+          );
+
+          if (status === PermissionsAndroid.RESULTS.GRANTED) {
+            RNImmediatePhoneCall.immediatePhoneCall(phoneNumber);
+          } else {
+            Linking.openURL(`tel:${phoneNumber}`).catch(err => console.log(err));
+          }
+        } catch (err) {
+          console.log('Immediate dial error, falling back:', err);
+          Linking.openURL(`tel:${phoneNumber}`).catch(err => console.log(err));
+        }
+      } else {
+        Linking.openURL(`tel:${phoneNumber}`).catch(err => {
+          console.log('Error opening native dialer:', err);
+        });
+      }
+    };
+
+    triggerPhoneCall(activeLead.phone);
 
     // Notify backend
     if (socketRef.current) {
