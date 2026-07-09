@@ -200,6 +200,7 @@ const UploadLeads = () => {
             </div>
           </div>
         </div>
+      )}
       {/* Wipe/Reset testing data card */}
       <div className="bg-rose-50/50 border border-rose-100/80 rounded-3xl p-8 space-y-4 shadow-sm">
         <div className="flex items-start gap-4">
