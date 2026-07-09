@@ -73,13 +73,7 @@ exports.getMe = async (req, res) => {
   try {
     res.status(200).json({
       success: true,
-      user: {
-        id: req.user.id,
-        name: req.user.name,
-        email: req.user.email,
-        role: req.user.role,
-        status: req.user.status
-      }
+      user: req.user
     });
   } catch (error) {
     console.error('Get profile error:', error);

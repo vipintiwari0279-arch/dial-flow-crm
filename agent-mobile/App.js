@@ -324,7 +324,7 @@ export default function App() {
         setLeaveEnd('');
         fetchLeaveHistory(token);
         // Refresh profile to get updated balances
-        const profileRes = await fetch(`${API_URL}/api/auth/profile`, {
+        const profileRes = await fetch(`${API_URL}/api/auth/me`, {
           headers: { Authorization: `Bearer ${token}` }
         });
         const profileData = await profileRes.json();

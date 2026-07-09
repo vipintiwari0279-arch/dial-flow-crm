@@ -221,7 +221,7 @@ const AgentSimulator = () => {
         setLeaveEnd('');
         fetchLeaveHistory(token);
         // Refresh agent user profile to get updated balances
-        const profileRes = await fetch('/api/auth/profile', {
+        const profileRes = await fetch('/api/auth/me', {
           headers: { 'Authorization': `Bearer ${token}` }
         });
         const profileData = await profileRes.json();
