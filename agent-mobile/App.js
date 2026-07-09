@@ -93,7 +93,7 @@ export default function App() {
 
   // Custom added states
   const [showSplash, setShowSplash] = useState(true);
-  const [voipCallMode, setVoipCallMode] = useState(false);
+  const [voipCallMode, setVoipCallMode] = useState(true);
   const [isRecording, setIsRecording] = useState(false);
   const [showSupportModal, setShowSupportModal] = useState(false);
 

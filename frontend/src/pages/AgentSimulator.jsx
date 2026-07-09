@@ -79,7 +79,7 @@ const AgentSimulator = () => {
 
   // Custom states added for welcome splash, support modal, call recording and VoIP calling
   const [showSplash, setShowSplash] = useState(true);
-  const [voipCallMode, setVoipCallMode] = useState(false);
+  const [voipCallMode, setVoipCallMode] = useState(true);
   const [isRecording, setIsRecording] = useState(false);
   const [showSupportModal, setShowSupportModal] = useState(false);
 
