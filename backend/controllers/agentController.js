@@ -19,7 +19,7 @@ exports.getAgents = async (req, res) => {
   try {
     const agents = await User.findAll({
       where: { role: 'agent' },
-      attributes: ['id', 'name', 'email', 'status', 'currentLeadId']
+      attributes: ['id', 'name', 'email', 'phone', 'status', 'currentLeadId']
     });
 
     const { start, end } = getTodayRange();
@@ -81,6 +81,7 @@ exports.getAgents = async (req, res) => {
           id: agent.id,
           name: agent.name,
           email: agent.email,
+          phone: agent.phone || '-',
           status: agent.status,
           callsToday: callsCount,
           connected: connectedCount,
@@ -102,22 +103,28 @@ exports.getAgents = async (req, res) => {
 // @route   POST /api/agents
 // @access  Private (Admin Only)
 exports.createAgent = async (req, res) => {
-  const { name, email, password } = req.body;
+  const { name, email, password, phone } = req.body;
 
   try {
-    if (!name || !email || !password) {
-      return res.status(400).json({ success: false, message: 'Please provide all details' });
+    if (!name || !email || !password || !phone) {
+      return res.status(400).json({ success: false, message: 'Please provide all details (Name, Email, Password, and Phone Number)' });
     }
 
     const agentExists = await User.findOne({ where: { email } });
     if (agentExists) {
-      return res.status(400).json({ success: false, message: 'User already exists' });
+      return res.status(400).json({ success: false, message: 'Email address already registered' });
+    }
+
+    const phoneExists = await User.findOne({ where: { phone } });
+    if (phoneExists) {
+      return res.status(400).json({ success: false, message: 'Phone number already registered' });
     }
 
     const newAgent = await User.create({
       name,
       email,
       password,
+      phone,
       role: 'agent',
       status: 'offline'
     });
@@ -136,6 +143,7 @@ exports.createAgent = async (req, res) => {
         id: newAgent.id,
         name: newAgent.name,
         email: newAgent.email,
+        phone: newAgent.phone,
         status: newAgent.status
       }
     });
@@ -149,7 +157,7 @@ exports.createAgent = async (req, res) => {
 // @route   PUT /api/agents/:id
 // @access  Private (Admin Only)
 exports.updateAgent = async (req, res) => {
-  const { name, email, password } = req.body;
+  const { name, email, password, phone } = req.body;
 
   try {
     const agent = await User.findByPk(req.params.id);
@@ -158,8 +166,16 @@ exports.updateAgent = async (req, res) => {
       return res.status(404).json({ success: false, message: 'Agent not found' });
     }
 
+    if (phone && phone !== agent.phone) {
+      const phoneExists = await User.findOne({ where: { phone } });
+      if (phoneExists) {
+        return res.status(400).json({ success: false, message: 'Phone number already in use by another agent' });
+      }
+    }
+
     agent.name = name || agent.name;
     agent.email = email || agent.email;
+    agent.phone = phone || agent.phone;
     if (password) {
       agent.password = password;
     }
@@ -171,7 +187,8 @@ exports.updateAgent = async (req, res) => {
       agent: {
         id: agent.id,
         name: agent.name,
-        email: agent.email
+        email: agent.email,
+        phone: agent.phone
       }
     });
   } catch (error) {

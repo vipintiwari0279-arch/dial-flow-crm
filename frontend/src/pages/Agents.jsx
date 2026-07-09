@@ -12,6 +12,7 @@ const Agents = () => {
   // Form states
   const [name, setName] = useState('');
   const [email, setEmail] = useState('');
+  const [phone, setPhone] = useState('');
   const [password, setPassword] = useState('');
   const [targetCalls, setTargetCalls] = useState(150);
   const [error, setError] = useState('');
@@ -50,7 +51,7 @@ const Agents = () => {
           'Content-Type': 'application/json',
           'Authorization': `Bearer ${token}`
         },
-        body: JSON.stringify({ name, email, password })
+        body: JSON.stringify({ name, email, password, phone })
       });
       const data = await res.json();
 
@@ -58,6 +59,7 @@ const Agents = () => {
         setName('');
         setEmail('');
         setPassword('');
+        setPhone('');
         setShowAddModal(false);
         fetchAgents();
       } else {
@@ -140,6 +142,7 @@ const Agents = () => {
                 <tr className="border-b border-slate-100 text-xs font-bold text-slate-400 uppercase tracking-wider bg-slate-50/50">
                   <th className="py-4 px-6">Name</th>
                   <th className="py-4 px-6">Email Address</th>
+                  <th className="py-4 px-6">Phone Number</th>
                   <th className="py-4 px-6 text-center">Daily Target</th>
                   <th className="py-4 px-6">Status</th>
                   <th className="py-4 px-6 text-right">Actions</th>
@@ -150,6 +153,7 @@ const Agents = () => {
                   <tr key={agent.id} className="hover:bg-slate-50/50 transition-colors">
                     <td className="py-4 px-6 font-semibold text-slate-700">{agent.name}</td>
                     <td className="py-4 px-6 text-slate-500 font-medium">{agent.email}</td>
+                    <td className="py-4 px-6 text-slate-500 font-medium">{agent.phone || '-'}</td>
                     <td className="py-4 px-6 text-center font-bold text-slate-700">
                       <div className="inline-flex items-center gap-1 bg-slate-100 px-3 py-1 rounded-full text-xs">
                         <Target className="w-3.5 h-3.5 text-brand-600" />
@@ -244,6 +248,18 @@ const Agents = () => {
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
                   placeholder="agent@dialflow.com"
+                  className="block w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-slate-800 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-brand-500 focus:bg-white text-sm"
+                />
+              </div>
+
+              <div>
+                <label className="text-xs font-bold text-slate-500 tracking-wider uppercase block mb-1">Phone Number</label>
+                <input
+                  type="text"
+                  required
+                  value={phone}
+                  onChange={(e) => setPhone(e.target.value.replace(/[^0-9]/g, ''))}
+                  placeholder="e.g. 9876543210"
                   className="block w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-slate-800 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-brand-500 focus:bg-white text-sm"
                 />
               </div>
