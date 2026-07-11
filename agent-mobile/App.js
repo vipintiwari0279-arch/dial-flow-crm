@@ -101,14 +101,14 @@ export default function App() {
   const timerIntervalRef = useRef(null);
   const countdownIntervalRef = useRef(null);
 
-  // Splash Screen timer (4 seconds)
+  // Splash Screen timer (1.5 seconds)
   useEffect(() => {
     // Pre-warm Render server in background during splash screen to prevent cold start latency
     fetch(API_URL).catch(() => {});
 
     const timer = setTimeout(() => {
       setShowSplash(false);
-    }, 4000);
+    }, 1500);
     return () => clearTimeout(timer);
   }, []);
 

@@ -89,7 +89,7 @@ const AgentSimulator = () => {
 
     const timer = setTimeout(() => {
       setShowSplash(false);
-    }, 4000);
+    }, 1500);
     return () => clearTimeout(timer);
   }, []);
 
