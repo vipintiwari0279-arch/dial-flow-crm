@@ -23,6 +23,11 @@ const Login = () => {
   const { login } = useAuth();
   const navigate = useNavigate();
 
+  React.useEffect(() => {
+    // Pre-warm Render server in background on component mount to prevent cold start latency
+    fetch('/').catch(() => {});
+  }, []);
+
   const handleSubmit = async (e) => {
     e.preventDefault();
     setError('');

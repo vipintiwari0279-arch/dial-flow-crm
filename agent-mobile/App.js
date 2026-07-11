@@ -103,6 +103,9 @@ export default function App() {
 
   // Splash Screen timer (4 seconds)
   useEffect(() => {
+    // Pre-warm Render server in background during splash screen to prevent cold start latency
+    fetch(API_URL).catch(() => {});
+
     const timer = setTimeout(() => {
       setShowSplash(false);
     }, 4000);
