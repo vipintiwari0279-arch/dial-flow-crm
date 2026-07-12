@@ -1,0 +1,6 @@
+- [x] Implement welcome splash screen in agent-mobile/App.js & AgentSimulator.jsx
+- [x] Render leave history list in agent-mobile/App.js
+- [x] Add contact support section in agent-mobile/App.js & AgentSimulator.jsx
+- [x] Integrate call recording simulation & playback buttons in mobile dialer & reports
+- [x] Add Auto-Dialer predictive mode switch & logic in mobile dialer
+- [x] Create simulated in-app calling mode toggle to prevent SIM dialer redirecting during testing

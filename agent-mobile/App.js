@@ -22,6 +22,8 @@ import * as Location from 'expo-location';
 import RNImmediatePhoneCall from 'react-native-immediate-phone-call';
 import CallDetectorManager from 'react-native-call-detector';
 
+import AsyncStorage from '@react-native-async-storage/async-storage';
+
 const API_URL = 'https://dial-flow-crm.onrender.com'; // Deployed live Render backend URL
 
 export default function App() {
@@ -101,14 +103,37 @@ export default function App() {
   const timerIntervalRef = useRef(null);
   const countdownIntervalRef = useRef(null);
 
-  // Splash Screen timer (1.5 seconds)
+  // Splash Screen timer (1.5 seconds) and session check
   useEffect(() => {
     // Pre-warm Render server in background during splash screen to prevent cold start latency
     fetch(API_URL).catch(() => {});
 
+    const checkSession = async () => {
+      try {
+        const storedToken = await AsyncStorage.getItem('userToken');
+        const storedUser = await AsyncStorage.getItem('userData');
+        if (storedToken && storedUser) {
+          const parsedUser = JSON.parse(storedUser);
+          setToken(storedToken);
+          setUser(parsedUser);
+          connectSocket(parsedUser.id, parsedUser.name);
+          fetchNextLead(storedToken);
+          fetchAttendanceStatus(storedToken);
+          fetchOutcomesList(storedToken);
+          fetchLeaveHistory(storedToken);
+          setScreen('dialer');
+        }
+      } catch (e) {
+        console.log('Error reading persistent session:', e);
+      } finally {
+        setShowSplash(false);
+      }
+    };
+
     const timer = setTimeout(() => {
-      setShowSplash(false);
+      checkSession();
     }, 1500);
+
     return () => clearTimeout(timer);
   }, []);
 
@@ -259,6 +284,10 @@ export default function App() {
       const data = await response.json();
 
       if (data.success) {
+        // Save session locally for auto-login bypass
+        await AsyncStorage.setItem('userToken', data.token);
+        await AsyncStorage.setItem('userData', JSON.stringify(data.user));
+
         setToken(data.token);
         setUser(data.user);
         connectSocket(data.user.id, data.user.name);
@@ -735,7 +764,7 @@ export default function App() {
     handleCountdownExpiry();
   };
 
-  const handleLogout = () => {
+  const handleLogout = async () => {
     clearInterval(timerIntervalRef.current);
     clearInterval(countdownIntervalRef.current);
     if (socketRef.current) {
@@ -745,6 +774,12 @@ export default function App() {
         status: 'offline'
       });
       socketRef.current.close();
+    }
+    try {
+      await AsyncStorage.removeItem('userToken');
+      await AsyncStorage.removeItem('userData');
+    } catch (e) {
+      console.log('Error clearing session storage:', e);
     }
     setToken('');
     setUser(null);
